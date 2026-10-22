@@ -2,7 +2,7 @@
 
 A one-thumb jet game for the phone browser: grow your contrail, cut off the bots, barrel roll through trails, steal the bounty.
 
-Play: https://keen-blancmange-0db156.netlify.app
+Play: https://contrail-io.netlify.app
 
 ## What's here
 - `index.html`: the whole game (one file: HTML, CSS and JavaScript)
