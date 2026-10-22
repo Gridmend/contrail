@@ -310,7 +310,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine">v0.6 · 12 bots, or fly with friends</p>
+    <p class="fine">v0.6.1 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -332,6 +332,7 @@ body{
     <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
     <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
     <button class="btn" id="again" type="button" disabled>Fly again</button>
+    <button class="btn-ghost" id="d-menu" type="button">Main menu</button>
     <button class="btn-ghost" id="d-room" type="button" hidden>Leave room</button>
   </section>
 
@@ -1118,7 +1119,7 @@ body{
     $('d-score').textContent = st.score;
     $('d-crowned').hidden = st.crownT < 1;
     $('d-crowned').textContent = `Crowned ${st.crownT}s`;
-    $('d-room').hidden = net.role === 'solo';
+    $('d-room').hidden = net.role === 'solo'; $('d-menu').hidden = net.role !== 'solo';
     pointer.down = false; boostHeld = false; touches.clear(); padOff();
     lenDrop = 0; $('lenDelta').classList.remove('on'); pendingCC = null;
     hideRollTip();
@@ -2211,6 +2212,7 @@ body{
     $('rooms').hidden = true; $('menu').hidden = false; roomError('');
   });
   $('d-room').addEventListener('click', () => location.reload());
+  $('d-menu').addEventListener('click', () => { $('death').hidden = true; $('menu').hidden = false; $('overlay').scrollTop = 0; });
 
   // ================= LOOP =================
   let last = performance.now();
