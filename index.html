@@ -310,7 +310,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine" id="ver">v0.6.3 · 12 bots, or fly with friends</p>
+    <p class="fine" id="ver">v0.6.4 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -382,7 +382,7 @@ body{
 
   // ---- tuning ----
   const W = 4500, H = 4500,   /* 1.5x wider and taller (was 3000) */ SEG = 7, SPEED = 170, BOOST = 306, TURN = 8.3;
-  const SAFE = 2, HIT = 6.5, PROTECT = 3, BOT_RESPAWN = 2.5;
+  const SAFE = 2, HIT = 6.5, PROTECT = 3, BOT_RESPAWN = 2.5, SPAWN_CLEAR = 400;
   const ORBS = 560,   /* ~250 x 2.25 so fuel stays as dense on the bigger map */ DROP_EVERY = 30, DROP_LIFE = 8;
   // fading contrails: each trail point lives LIFE seconds, fades (and is harmless) for the last FADE
   const LIFE_BASE = 6, LIFE_PER = 100, LIFE_MAX = 15, FADE = 1;
@@ -612,15 +612,20 @@ body{
   function makeJet(o){ return Object.assign({ uid: jetUid++, x:0,y:0,a:0,fuel:0,life:LIFE_BASE,pts:[],alive:false,protect:0,stall:0,boost:false,kills:0,respawn:0,bb:[0,0,0,0],ai:{} }, o); }
 
   function spawn(j){
+    // try spots until one is at least SPAWN_CLEAR from every enemy jet and every point of every enemy trail
     let bx = W/2, by = H/2, bs = -1;
-    for (let i=0;i<24;i++){
+    for (let i=0;i<120;i++){
       const x = rand(260,W-260), y = rand(260,H-260); let s = 1e9;
       for (const o of jets){
         if (!o.alive || o===j) continue;
         s = Math.min(s, Math.hypot(o.x-x, o.y-y));
-        for (let k=0;k<o.pts.length;k+=4){ const p=o.pts[k]; const d=Math.hypot(p.x-x,p.y-y); if (d<s) s=d; }
+        if (s < bs) break;
+        const b = o.bb;
+        if (x < b[0]-s || x > b[2]+s || y < b[1]-s || y > b[3]+s) continue;   // whole trail is farther than our best so far
+        for (let k=0;k<o.pts.length;k++){ const p=o.pts[k]; const d=Math.hypot(p.x-x,p.y-y); if (d<s) s=d; }
       }
       if (s>bs){ bs=s; bx=x; by=y; }
+      if (bs >= SPAWN_CLEAR) break;
     }
     j.x=bx; j.y=by; j.a = Math.atan2(H/2-by, W/2-bx) + rand(-.8,.8);
     j.pts=[{x:bx,y:by,t:time}]; j.born=time; j.alive=true; j.protect=PROTECT; j.stall=0; j.boost=false; j.kills=0;
@@ -754,7 +759,7 @@ body{
     const now = performance.now(), t = { x:e.clientX, y:e.clientY, downAt:now };
     touches.set(e.pointerId, t);
     if (!pointer.down){
-      takePrimary(e.pointerId, t);
+      takePrimary(e.pointerId, t); player.gBurn = 0;
       boostHeld = steerMode === 'stick' && lastTapWasTap && (now - lastUp) < 300;
     }
     try { cv.setPointerCapture(e.pointerId); } catch(_) {}
@@ -773,7 +778,11 @@ body{
     const sdx = e.clientX - pointer.sx, sdy = e.clientY - pointer.sy;
     // barrel roll: an upward swipe of 60px+ that ends with the thumb lifting, all within 300ms
     if (state === 'play' && dur < SWIPE_MS && -sdy >= SWIPE_PX && Math.abs(sdy) > Math.abs(sdx) && pointer.sy < innerHeight - SWIPE_DEAD){
-      if (requestRoll(sdx >= 0 ? 1 : -1)){ player.av = 0; rolledOnce(); }
+      if (requestRoll(sdx >= 0 ? 1 : -1)){
+        player.av = 0; rolledOnce();
+        if (net.role !== 'guest' && player.gBurn > 0){ player.fuel += player.gBurn; player.runBest = Math.max(player.runBest, player.fuel); }
+        player.gBurn = 0; lenDrop = 0; lastBurnAt = -9; $('lenDelta').classList.remove('on');   // a roll costs nothing, so no minus number
+      }
     }
     lastTapWasTap = dur < 200 && Math.hypot(sdx, sdy) < 14;
     pointer.down = false; boostHeld = false; lastUp = now;
@@ -810,7 +819,7 @@ body{
         hv = clamp(sum, -1, 1) * (4.2 + Math.min(1, held/.4)*4.1);
       }
     }
-    return { sa, hv, kk: (keys.r?1:0) - (keys.l?1:0), boost: (pointer.down && boostHeld) || touches.size >= 2 || padHeld || keys.boost };
+    return { sa, hv, kk: (keys.r?1:0) - (keys.l?1:0), boost: !swipeLike && ((pointer.down && boostHeld) || touches.size >= 2 || padHeld || keys.boost) };
   }
   function applyIntent(j, I, dt){
     let want = 0;
@@ -836,6 +845,21 @@ body{
       for (let k=0;k<n;k++){ const p=o.pts[k], rr = r + ptHit(p) - HIT, dx=p.x-x, dy=p.y-y; if (dx*dx+dy*dy < rr*rr && isLethal(o,k,n)) return true; }
     }
     return false;
+  }
+  // Reflex: is there an enemy trail within 80px ahead of the nose? If so, the clearest heading to swerve to.
+  const DODGE_AHEAD = 80, DODGE_R = 10;
+  function clearAhead(j, ang){
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    for (const d of [20, 40, 60, DODGE_AHEAD]) if (trailHitAt(j.x + c*d, j.y + sn*d, j, DODGE_R)) return false;
+    return true;
+  }
+  function reflexDodge(j){
+    if (clearAhead(j, j.a)){ j.ai.dside = 0; return null; }
+    const side = j.ai.dside || (Math.random() < .5 ? 1 : -1);    // keep swerving the same way once committed
+    for (const off of [.55, 1.1, 1.7, 2.4]) for (const sd of [side, -side]){
+      if (clearAhead(j, j.a + off*sd)){ j.ai.dside = sd; return j.a + off*sd; }
+    }
+    j.ai.dside = side; return j.a + 2.4*side;                       // boxed in: turn as hard as possible
   }
   function spawnBuff(){
     const pool = mod === 'wide' ? BUFF_TYPES.filter(t => t !== 'wide') : BUFF_TYPES;   // no Wide Trail buff on Wide Trails day
@@ -1170,6 +1194,11 @@ body{
         j.ai.t -= dt;
         if (j.ai.t<=0){ botThink(j); j.ai.t = rand(.10,.16); }   // faster reactions (was .13-.21s)
         target = j.ai.want; turn = 5.0;
+        if (j.rollT <= 0){
+          j.ai.rx = (j.ai.rx || 0) - dt;
+          if (j.ai.rx <= 0){ j.ai.rx = 1/30; j.ai.dodge = reflexDodge(j); }
+          if (j.ai.dodge !== null && j.ai.dodge !== undefined){ target = j.ai.dodge; turn = 7.5; }   // reflex beats whatever it was planning
+        }
         j.ai.boostT -= dt; j.boost = j.ai.boostT > 0;
       }
       const ab = hasBuff(j, 'afterburner');
@@ -1186,11 +1215,11 @@ body{
       let sp = (j.boost ? BOOST : SPEED) * (1 + slipGain()*j.slip);   // slip is 0..1
       if (j.stall>0) sp *= .35;
       j.boostT = j.boost ? (j.boostT||0) + dt : 0;
-      if (j.boost && !ab){
+      if (j.boost && !ab && !(j.rollT > 0)){
         const ramp = 1 + clamp((j.boostT - 1)/2, 0, 1)*2, burned = Math.min(j.fuel, BURN*ramp*dt);
         j.fuel -= burned;
         if (j.isPlayer && burned > 0){
-          lenDrop += burned; lastBurnAt = time;
+          lenDrop += burned; lastBurnAt = time; j.gBurn = (j.gBurn || 0) + burned;
           // the tail visibly burns away: sparks where it shrinks
           sparkT -= dt; const tail = j.pts[0];
           if (tail && sparkT <= 0){ sparkT = .08; burst(tail.x, tail.y, '#ff9a4d', 3, .35); }
@@ -1520,7 +1549,6 @@ body{
   function drawJet(j, z){
     const s = 1.25 * Math.sqrt(.62 / Math.min(.62, viewF));
     ctx.save(); ctx.translate(j.x, j.y); ctx.rotate(j.a);
-    if (j.protect>0) ctx.globalAlpha = Math.sin(time*22)>0 ? 1 : .3;
     if (j.rollT > 0){ const ph = 1 - j.rollT/ROLL_T; ctx.scale(1, Math.cos(ph*2*Math.PI) || .001); }   // wings flip through the roll
     if (j.boost){
       const a0 = ctx.globalAlpha, f = 1 + Math.random()*.35;
@@ -1552,8 +1580,15 @@ body{
     }
     ctx.restore();
     if (j.protect>0){
-      ctx.beginPath(); ctx.arc(j.x, j.y, 20, 0, 6.283);
-      ctx.strokeStyle = j.isPlayer ? COL.youGlow : j.color; ctx.globalAlpha = .45; ctx.lineWidth = 1.5/z*1.4; ctx.stroke(); ctx.globalAlpha = 1;
+      // spawn shield: a glowing bubble for the whole protection window, fading out over its last 0.7s
+      const fade = Math.min(1, j.protect/.7), sc = j.look ? trailCols(j.look).glow : j.isPlayer ? COL.youGlow : j.color;
+      const R = 36*s/1.25 + Math.sin(time*6)*1.5, g = ctx.createRadialGradient(j.x, j.y, R*.35, j.x, j.y, R);
+      g.addColorStop(0, sc + '10'); g.addColorStop(.7, sc + '38'); g.addColorStop(1, sc + 'a0');
+      ctx.globalAlpha = fade; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(j.x, j.y, R, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = sc; ctx.lineWidth = Math.max(2.6, 2/z); ctx.globalAlpha = fade; ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = fade*.8; ctx.lineWidth = Math.max(2, 1.4/z);   // a glint sweeping round the bubble
+      ctx.beginPath(); ctx.arc(j.x, j.y, R - 4, time*3, time*3 + 1.1); ctx.stroke();
+      ctx.globalAlpha = 1;
     }
     if (j.isPlayer && j.flares > 0){
       // stored Flares charge: a small white roll icon (circular arrow) at the top-right of the roll ring
@@ -2079,7 +2114,7 @@ body{
     // your own jet: sounds, the "-N" length counter, tips, and sending your controls
     if (player.alive){
       if (player.boost !== wasBoosting){ if (player.boost) sfx('boost'); musicRate(player.boost ? 1.05 : 1); wasBoosting = player.boost; }
-      if (player.boost && player.fuel < gFuel){ lenDrop += gFuel - player.fuel; lastBurnAt = time; }
+      if (player.boost && !(player.rollT > 0) && player.fuel < gFuel){ lenDrop += gFuel - player.fuel; lastBurnAt = time; }
       if (!boostTip && player.fuel >= MIN_BOOST){ boostTip = true; toast(steerMode === 'stick' ? 'Boost ready: double-tap and hold' : 'Boost ready: hold the boost pad'); }
       if (!rollTip && time - flightStart > 3.2 && player.rollCD <= 0){ rollTip = true; showRollTip(); }
     }
@@ -2246,7 +2281,7 @@ body{
     if (!on){ hgKing = false; $('hg-king').setAttribute('aria-pressed', 'false');
       Object.assign(myLook, sanitizeLook(myLook, true)); ls.set('contrail-look', JSON.stringify(myLook));   // back to looks you've earned
       player.look = myLook; player.color = lookHex(myLook); if (net.role === 'guest') netSend({ t:'look', look: packLook(myLook) }); }
-    $('ver').textContent = 'v0.6.3 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
+    $('ver').textContent = 'v0.6.4 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
   }
   setDev(devMode);
   let verTaps = [];
