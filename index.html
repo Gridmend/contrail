@@ -310,7 +310,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine">v0.6.2 · 12 bots, or fly with friends</p>
+    <p class="fine" id="ver">v0.6.3 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -343,6 +343,7 @@ body{
     <div class="hg-row"><span class="stat-label">JET COLOR</span><div class="chips" id="hg-c"></div></div>
     <div class="hg-row"><span class="stat-label">TRAIL COLOR</span><div class="chips" id="hg-tc"></div></div>
     <div class="hg-row"><span class="stat-label">TRAIL EFFECT</span><div class="chips" id="hg-fx"></div></div>
+    <div class="hg-row" id="hg-dev" hidden><span class="stat-label" style="color:var(--drop)">DEVELOPER</span><div class="chips"><button class="chip" id="hg-king" type="button" aria-pressed="false">King preview</button><button class="chip" id="hg-devoff" type="button">Turn off dev mode</button></div></div>
     <p class="hg-hint" id="hg-hint"></p>
     <button class="btn" id="hg-done" type="button">Done</button>
   </section>
@@ -684,16 +685,21 @@ body{
   prog.best = Math.max(prog.best, +ls.get('contrail-best-length') || 0);
   prog.kills = Math.max(prog.kills, +ls.get('contrail-best-kills') || 0);
   const progVal = k => k === 'days' ? prog.days.length : (prog[k] || 0);
-  const isUnlocked = item => !item.need || progVal(item.need.k) >= item.need.n;
+  // developer mode: every look unlocked for testing; real progress keeps counting underneath
+  { const dq = new URLSearchParams(location.search).get('dev');
+    if (dq !== null){ ls.set('contrail-dev', dq === 'off' || dq === '0' ? '0' : '1'); try { history.replaceState(null, '', location.pathname + location.hash); } catch(e) {} } }
+  let devMode = ls.get('contrail-dev') === '1';
+  const earned = item => !item.need || progVal(item.need.k) >= item.need.n;
+  const isUnlocked = item => devMode || earned(item);
   const ALL_LOOKS = () => [...LOOK_SHAPES.map(x => ['shape', x]), ...LOOK_COLORS.map(x => ['color', x]), ...LOOK_FX.map(x => ['trail effect', x])];
   function recordRun(st, daily){
-    const before = new Set(ALL_LOOKS().filter(([, x]) => isUnlocked(x)).map(([, x]) => x.id));
+    const before = new Set(ALL_LOOKS().filter(([, x]) => earned(x)).map(([, x]) => x.id));
     prog.rounds++; prog.kills += st.kills || 0; prog.cc += st.cc || 0;
     prog.best = Math.max(prog.best, st.runLen || 0); prog.streak = Math.max(prog.streak, st.streak || 0);
     prog.crown = Math.max(prog.crown, st.crownT || 0); prog.secs = Math.max(prog.secs, st.secs || 0);
     if (daily && !prog.days.includes(TODAY_KEY)) prog.days = [...prog.days, TODAY_KEY].slice(-30);
     ls.set('contrail-prog', JSON.stringify(prog));
-    return ALL_LOOKS().filter(([, x]) => isUnlocked(x) && !before.has(x.id));
+    return ALL_LOOKS().filter(([, x]) => earned(x) && !before.has(x.id));
   }
   // your chosen look; anything not unlocked falls back to the free default
   const myLook = Object.assign({ sh:'dart', c:'ice', tc:'match', fx:'std' }, (() => { try { return JSON.parse(ls.get('contrail-look') || '{}'); } catch(e) { return {}; } })());
@@ -2153,7 +2159,7 @@ body{
   $('friends').addEventListener('click', () => { ensureAudio(); showRooms(); });
 
   // ---------- hangar screen ----------
-  let hgFrom = 'menu', hgRaf = 0;
+  let hgFrom = 'menu', hgRaf = 0, hgKing = false;
   const lockText = x => { const v = progVal(x.need.k), n = x.need.n;
     const unit = { best:'best', streak:'best streak', crown:'best', kills:'so far', days:'so far', secs:'best', rounds:'so far', cc:'so far' }[x.need.k];
     const show = x.need.k === 'crown' || x.need.k === 'secs' ? `${Math.min(v, n)}s` : Math.min(v, n);
@@ -2200,10 +2206,27 @@ body{
     if (L.fx === 'comet') for (let q = 0; q < 3; q++){ path(20 + q*13, 60); c.globalAlpha = .08; c.lineWidth = 22 + q*9; c.stroke(); }
     c.globalAlpha = 1; c.lineWidth = 4.5;
     if (L.fx === 'rainbow') for (let q = 0; q < 60; q += 3){ path(q, Math.min(60, q+3)); c.strokeStyle = `hsl(${(q*10 - t*140) % 360 + 360},95%,68%)`; c.stroke(); }
-    else { path(0, 60); c.strokeStyle = tc.core; c.stroke(); }
+    else { path(0, 60); c.strokeStyle = hgKing ? GOLD : tc.core; c.stroke(); }
+    if (hgKing){
+      // same treatment the crowned jet gets in flight
+      const br = .5 + .5*Math.sin(t*4);
+      path(0, 60); c.strokeStyle = GOLD; c.globalAlpha = .16 + .08*br; c.lineWidth = 30; c.stroke(); c.globalAlpha = .32 + .1*br; c.lineWidth = 16; c.stroke();
+      c.globalAlpha = 1; c.strokeStyle = GOLD; c.lineWidth = 4.5; c.stroke();
+      c.setLineDash([10, 22]); c.lineDashOffset = -t*110; c.strokeStyle = '#ffffff'; c.lineWidth = 3; c.stroke(); c.setLineDash([]); c.lineDashOffset = 0;
+      c.strokeStyle = '#fff6c8'; c.lineWidth = 1.8;
+      for (let q = 3; q < 60; q += 7){ const tw = Math.sin(t*5 + q*1.7); if (tw < .35) continue; const g = 3 + 5*tw, sd = (q % 2 ? 1 : -1)*9, [x, y] = pts[q];
+        c.globalAlpha = tw; c.beginPath(); c.moveTo(x - g, y + sd); c.lineTo(x + g, y + sd); c.moveTo(x, y + sd - g); c.lineTo(x, y + sd + g); c.stroke(); }
+      c.globalAlpha = 1;
+    }
     const [hx, hy] = pts[60], [px, py] = pts[59];
     c.save(); c.translate(hx + 10, hy); c.rotate(Math.atan2(hy - py, hx - px)); jetPath(c, L.sh, 1.9);
     c.fillStyle = byId(LOOK_COLORS, L.c).body || lookHex(L); c.fill(); c.lineWidth = 1.5; c.strokeStyle = COL.void; c.stroke(); c.restore();
+    if (hgKing){
+      const x = hx + 10, y = hy - 24, R = 8;
+      c.fillStyle = GOLD; c.beginPath();
+      c.moveTo(x - R, y + R*.55); c.lineTo(x - R, y - R*.35); c.lineTo(x - R*.5, y + R*.05); c.lineTo(x, y - R*.75);
+      c.lineTo(x + R*.5, y + R*.05); c.lineTo(x + R, y - R*.35); c.lineTo(x + R, y + R*.55); c.closePath(); c.fill();
+    }
     hgRaf = requestAnimationFrame(hgPreview);
   }
   function showHangar(from){
@@ -2211,10 +2234,28 @@ body{
     for (const id of ['menu','death','rooms']) $(id).hidden = true;
     $('hangar').hidden = false; $('overlay').hidden = false;
     const n = ALL_LOOKS().filter(([, x]) => isUnlocked(x)).length, tot = ALL_LOOKS().length;
-    $('hg-hint').textContent = n === tot ? `All ${tot} unlocked. Nice flying.` : `${n} of ${tot} unlocked. Tap a locked one to see how to earn it.`;
+    const real = ALL_LOOKS().filter(([, x]) => earned(x)).length;
+    $('hg-dev').hidden = !devMode;
+    $('hg-hint').textContent = devMode ? `Dev mode: everything unlocked for testing. Real progress: ${real} of ${tot} earned.`
+      : n === tot ? `All ${tot} unlocked. Nice flying.` : `${n} of ${tot} unlocked. Tap a locked one to see how to earn it.`;
     hgRender(); cancelAnimationFrame(hgRaf); hgRaf = requestAnimationFrame(hgPreview);
   }
   $('hangarBtn').addEventListener('click', () => showHangar('menu'));
+  function setDev(on){
+    devMode = on; ls.set('contrail-dev', on ? '1' : '0');
+    if (!on){ hgKing = false; $('hg-king').setAttribute('aria-pressed', 'false');
+      Object.assign(myLook, sanitizeLook(myLook, true)); ls.set('contrail-look', JSON.stringify(myLook));   // back to looks you've earned
+      player.look = myLook; player.color = lookHex(myLook); if (net.role === 'guest') netSend({ t:'look', look: packLook(myLook) }); }
+    $('ver').textContent = 'v0.6.3 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
+  }
+  setDev(devMode);
+  let verTaps = [];
+  $('ver').addEventListener('click', () => {
+    const now = performance.now(); verTaps = verTaps.filter(x => now - x < 3000); verTaps.push(now);
+    if (verTaps.length >= 7){ verTaps = []; setDev(!devMode); }
+  });
+  $('hg-king').addEventListener('click', () => { hgKing = !hgKing; $('hg-king').setAttribute('aria-pressed', String(hgKing)); });
+  $('hg-devoff').addEventListener('click', () => { setDev(false); showHangar(hgFrom); });
   $('d-unlock').addEventListener('click', () => showHangar('death'));
   $('hg-done').addEventListener('click', () => { cancelAnimationFrame(hgRaf); $('hangar').hidden = true; $(hgFrom).hidden = false; });
   $('create').addEventListener('click', () => {
