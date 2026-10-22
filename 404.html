@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050b1d">
+<title>Contrail.io</title>
+<link rel="icon" type="image/png" href="/icons/favicon-32.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Chakra+Petch:wght@600;700&display=swap">
+<style>
+:root{ color-scheme:dark; --void:#050b1d; --sky:#0b1633; --ink:#e9f0ff; --muted:#93a4cc; --fuel:#8ef0ff; --drop:#ffc857; --line:rgba(142,240,255,.18) }
+html,body{height:100%}
+body{margin:0; background:radial-gradient(ellipse at 50% 30%, var(--sky), var(--void) 70%); color:var(--ink);
+  font-family:"Barlow","Segoe UI",system-ui,sans-serif; display:grid; place-items:center;
+  padding-block:24px; padding-left:max(16px, env(safe-area-inset-left,0px)); padding-right:max(16px, env(safe-area-inset-right,0px)); box-sizing:border-box}
+.card{max-width:340px; width:100%; display:grid; gap:16px; text-align:center}
+.trail{height:56px}
+h1{margin:0; font-family:"Chakra Petch","Segoe UI",sans-serif; font-size:38px; line-height:1; letter-spacing:.02em}
+h1 span{color:var(--fuel)}
+p{margin:0; color:var(--muted); font-size:16px; line-height:1.45}
+a.btn{display:block; text-decoration:none; font-family:"Chakra Petch","Segoe UI",sans-serif; font-weight:700; font-size:18px; letter-spacing:.12em;
+  text-transform:uppercase; background:var(--drop); color:#1a1200; border-radius:8px; padding:14px 18px}
+a.btn:focus-visible{outline:3px solid var(--fuel); outline-offset:3px}
+</style>
+</head>
+<body>
+<main class="card">
+  <svg class="trail" viewBox="0 0 300 56" aria-hidden="true">
+    <path d="M10 44 C 80 44, 110 12, 190 22 S 250 30, 262 26" fill="none" stroke="#8ef0ff" stroke-opacity=".25" stroke-width="12" stroke-linecap="round"/>
+    <path d="M10 44 C 80 44, 110 12, 190 22 S 250 30, 262 26" fill="none" stroke="#f4f8ff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M290 24 L 262 15 L 268 26 L 262 37 Z" fill="#ffffff"/>
+  </svg>
+  <h1>Contrail<span>.io</span></h1>
+  <p>That page flew off the radar. The game is right this way.</p>
+  <a class="btn" href="/">Fly</a>
+</main>
+</body>
+</html>
