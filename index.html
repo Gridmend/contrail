@@ -908,6 +908,7 @@ body{
         $('d-bestlabel').textContent = 'BEST · LENGTH / KILLS';
       }
       deathPos = { x:j.x, y:j.y }; state = 'dead';
+      track('death');
       $('d-new').hidden = !newBest;
       $('d-best').textContent = showLen;
       $('d-bestk').textContent = showKills;
@@ -1593,8 +1594,11 @@ body{
 
   // ================= FLOW =================
   let wake = null;
+  // GoatCounter events (only on the real site; the script may not have loaded yet, or be blocked)
+  function track(path){ try { if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path, event: true }); } catch(e) {} }
   function fly(){
     ensureAudio();                     // the Fly tap is the gesture that unlocks sound
+    track('round-start');
     $('overlay').hidden = true; $('menu').hidden = true; $('death').hidden = true;
     ['stats','board','minimap'].forEach(id => $(id).hidden = false);
     padOff(); pad.hidden = steerMode !== 'halves';
@@ -1664,5 +1668,6 @@ body{
   if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 })();
 </script>
+<script data-goatcounter="https://contrail.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
