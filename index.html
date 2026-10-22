@@ -310,7 +310,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine">v0.6.1 · 12 bots, or fly with friends</p>
+    <p class="fine">v0.6.2 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -424,8 +424,8 @@ body{
     grid:'rgba(140,170,255,0.07)', sky:'#0b1633', void:'#050b1d' };
   const BOT_COUNT = 12;   // 3 hunters, 3 cutters, 3 cowards, 3 builders
   // distinct bright hues for each bot, avoiding the buff colors and gold
-  const BOT_COLORS = ['#ff6b8a','#ffb454','#7dff9b','#c58bff','#5fd4ff','#ff7d4f','#f5e663','#4fffd2','#ff8de0','#9fb6ff',
-                      '#ff9fb3','#d4a2ff','#7fd1ff','#b8f36a','#ffa07a','#6fe3c0','#f7b0ff','#a8c8ff','#ffcf7a','#8ff0a4','#e48cff','#72b4ff'];
+  const BOT_COLORS = ['#ff6b8a','#ffb454','#7dff9b','#c58bff','#5fd4ff','#ff7d4f','#4fffd2','#ff8de0','#9fb6ff',
+                      '#ff9fb3','#d4a2ff','#7fd1ff','#b8f36a','#ffa07a','#6fe3c0','#f7b0ff','#a8c8ff','#8ff0a4','#e48cff','#72b4ff'];
   const NAMES = ['VIPER','GHOST','NOMAD','BANDIT','RAZOR','COBRA','DUSTER','HAWK','SABRE','TALON','FLINT','RAVEN','ROOK','WIDOW','BLAZE'];
   // roughly 40% cutters, 30% cowards, 30% builders, whatever the bot count
   // 3 hunters, then cutters / cowards / builders for the rest (13 bots -> 3 hunters, 4 cutters, 3 cowards, 3 builders)
@@ -1430,6 +1430,12 @@ body{
         continue;
       }
       trailPath(p, a, b, null);
+      if (crowned){
+        // the king's trail: a wide, breathing gold aura nobody else has
+        const br = .5 + .5*Math.sin(time*4);
+        ctx.strokeStyle = GOLD; ctx.globalAlpha = .16 + .08*br; ctx.lineWidth = wm*Math.max(46, 9/cam.z); ctx.stroke();
+        ctx.globalAlpha = .32 + .1*br; ctx.lineWidth = wm*Math.max(24, 5/cam.z); ctx.stroke();
+      }
       ctx.strokeStyle = glow;
       if (sb){ ctx.globalAlpha = .05*sb; ctx.lineWidth = wm*Math.max(30, 6/cam.z); ctx.stroke(); }
       ctx.globalAlpha = Math.min(1, (dayWide ? .16 : .08)*(1 + sb*.5)*pulseK); ctx.lineWidth = wm*Math.max(15, 3.2/cam.z); ctx.stroke();
@@ -1447,6 +1453,22 @@ body{
         const step = 6;
         for (let q = a; q < b; q += step){ trailPath(p, q, Math.min(b, q + step), null); ctx.strokeStyle = `hsl(${(q*5 - time*140) % 360 + 360},95%,68%)`; ctx.stroke(); }
       } else { ctx.strokeStyle = core; ctx.stroke(); }
+      if (crowned){
+        // bright light racing along the trail toward the king
+        const u = Math.max(1, 1/cam.z);
+        ctx.setLineDash([14*u, 34*u]); ctx.lineDashOffset = -time*160*u;
+        ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = 1; ctx.lineWidth = wm*Math.min(10, Math.max(4.5, 1.8/cam.z)); ctx.stroke();
+        ctx.setLineDash([]); ctx.lineDashOffset = 0;
+        // twinkling four-point glints scattered along it
+        ctx.strokeStyle = '#fff6c8'; ctx.lineWidth = Math.max(2.6, 1.1/cam.z); ctx.lineCap = 'round';
+        for (let q = a + (j.uid % 7); q < b; q += 9){
+          const tw = Math.sin(time*5 + q*1.7); if (tw < .35) continue;
+          const g = (6 + 9*tw)*u, side = (q % 2 ? 1 : -1)*12*u, P = p[q];
+          const x = P.x + side*.7, y = P.y - side*.7;
+          ctx.globalAlpha = tw; ctx.beginPath(); ctx.moveTo(x - g, y); ctx.lineTo(x + g, y); ctx.moveTo(x, y - g); ctx.lineTo(x, y + g); ctx.stroke();
+        }
+        ctx.globalAlpha = 1; trailPath(p, a, b, null);
+      }
       const h0 = Math.max(a, hs);
       if (b > h0){ trailPath(p, h0, b, null); ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = .95; ctx.lineWidth = wm*Math.min(8, Math.max(3, 1.2/cam.z)); ctx.stroke(); }
     }
@@ -1864,7 +1886,7 @@ body{
   // each guest sends its controls to the host; the host sends everyone the world 15 times a second.
   const qs = new URLSearchParams(location.search);
   const RELAY_URL = qs.get('relay') || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'ws://127.0.0.1:8787' : 'wss://relay-production-f41f.up.railway.app');
-  const HUMAN_COLORS = ['#ff5ec4','#7dff4a','#00e5ff','#ffd400','#b388ff','#ff8a65','#64ffda'];
+  const HUMAN_COLORS = ['#ff5ec4','#7dff4a','#00e5ff','#ff9fb3','#b388ff','#ff8a65','#64ffda'];
   const SNAP_HZ = 15, IN_HZ = 20, INTERP_MS = 110;
   const r1 = v => Math.round(v*10)/10, r2 = v => Math.round(v*100)/100;
 
