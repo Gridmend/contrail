@@ -210,6 +210,20 @@ body{
 .btn-ghost{font-family:var(--display); font-weight:600; font-size:14px; letter-spacing:.12em; text-transform:uppercase;
   background:transparent; color:var(--fuel); border:1px solid var(--line); border-radius:8px; padding:11px 16px; cursor:pointer; touch-action:manipulation}
 .btn-ghost:focus-visible{outline:2px solid var(--drop); outline-offset:2px}
+.logo.sm{font-size:26px}
+#room-pick, #lobby{display:grid; gap:10px}
+.card input{font-family:var(--display); font-size:20px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; background:rgba(5,11,29,.6); color:var(--ink);
+  border:1px solid var(--line); border-radius:8px; padding:12px; width:100%; box-sizing:border-box; user-select:text; -webkit-user-select:text; touch-action:manipulation}
+.card input::placeholder{color:rgba(147,164,204,.5)}
+.card input:focus-visible{outline:2px solid var(--fuel); outline-offset:1px}
+.joinrow{display:grid; grid-template-columns:1fr auto; gap:8px}
+.or{margin:4px 0 0; text-align:center; color:var(--muted); font-size:13px}
+.code{font-family:var(--display); font-size:52px; font-weight:700; letter-spacing:.2em; color:var(--drop); text-align:center; line-height:1; padding-left:.2em}
+.roster{list-style:none; margin:0; padding:0; display:grid; gap:6px}
+.roster li{display:flex; justify-content:space-between; align-items:center; border:1px solid var(--line); border-radius:6px; padding:9px 11px; font-family:var(--display); font-weight:600; letter-spacing:.06em}
+.roster .tag{font-size:10px; letter-spacing:.14em; color:var(--muted)}
+.room-err{margin:0; color:#ff8a96; font-size:14px; line-height:1.4; text-align:center}
+.btn-ghost:disabled, .btn:disabled{opacity:.45; cursor:default}
 .today{display:grid; gap:2px; border:1px solid rgba(255,216,74,.35); border-radius:8px; padding:9px 11px; background:rgba(255,216,74,.06)}
 .today .stat-label{color:#ffd84a}
 .today-name{font-family:var(--display); font-size:17px; letter-spacing:.06em; color:var(--ink)}
@@ -257,6 +271,7 @@ body{
     <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
     <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
     <button class="btn" id="fly" type="button">Fly</button>
+    <button class="btn-ghost" id="friends" type="button">Play with friends</button>
     <ul class="howto">
       <li><span class="k">STEER</span><span id="howto-steer">Put your thumb down anywhere and drag the way you want to fly. Let go to fly straight.</span></li>
       <li><span class="k">BOOST</span><span id="howto-boost">Double-tap and hold, or add a second finger. Boosting burns fuel.</span></li>
@@ -297,6 +312,32 @@ body{
     <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
     <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
     <button class="btn" id="again" type="button" disabled>Fly again</button>
+    <button class="btn-ghost" id="d-room" type="button" hidden>Leave room</button>
+  </section>
+
+  <section class="card" id="rooms" hidden>
+    <h2 class="logo sm">Play with friends</h2>
+    <div id="room-pick">
+      <label class="stat-label" for="pname">YOUR CALLSIGN</label>
+      <input id="pname" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MAVERICK">
+      <button class="btn" id="create" type="button">Create room</button>
+      <p class="or">or join a friend's room</p>
+      <div class="joinrow">
+        <input id="jcode" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE" aria-label="Room code">
+        <button class="btn-ghost" id="join" type="button">Join</button>
+      </div>
+    </div>
+    <div id="lobby" hidden>
+      <div class="stat-label">ROOM CODE</div>
+      <div class="code" id="lcode">----</div>
+      <p class="fine">Friends open contrail-io.netlify.app, tap Play with friends, and enter this code.</p>
+      <ul class="roster" id="roster"></ul>
+      <p class="fine" id="seats"></p>
+      <button class="btn" id="start" type="button" hidden>Start</button>
+      <p class="fine" id="waiting" hidden>Waiting for the host to start...</p>
+    </div>
+    <p class="room-err" id="room-err" role="alert" hidden></p>
+    <button class="btn-ghost" id="room-back" type="button">Back</button>
   </section>
 </div>
 
@@ -388,6 +429,8 @@ body{
   }
   addEventListener('hashchange', () => { DEBUG = location.hash === '#debug'; $('debug').hidden = !DEBUG; });
   let jets = [], orbs = [], parts = [];
+  // multiplayer: 'solo' (just you and bots), 'host' (your phone runs the room), 'guest' (you fly in a friend's room)
+  const net = { role:'solo', ws:null, code:'', myId:0, roster:[], started:false, snaps:[], sendT:0, inT:0, rollSeq:0, rollDir:1, name:'' };
   let boostTip = false, rollTip = false, shake = 0, rings = [];
   let state = 'menu', time = 0, dropT = 12, drop = null, dropCount = 0;
   let buff = null, buffT = BUFF_FIRST;
@@ -531,7 +574,9 @@ body{
     while (jets.some(j => j.name === n) && tries < 50);
     return n;
   }
-  function makeJet(o){ return Object.assign({ x:0,y:0,a:0,fuel:0,life:LIFE_BASE,pts:[],alive:false,protect:0,stall:0,boost:false,kills:0,respawn:0,bb:[0,0,0,0],ai:{} }, o); }
+  let jetUid = 1;
+  const isHuman = j => !!(j.isPlayer || j.remote);       // you, or a friend's jet in a room
+  function makeJet(o){ return Object.assign({ uid: jetUid++, x:0,y:0,a:0,fuel:0,life:LIFE_BASE,pts:[],alive:false,protect:0,stall:0,boost:false,kills:0,respawn:0,bb:[0,0,0,0],ai:{} }, o); }
 
   function spawn(j){
     let bx = W/2, by = H/2, bs = -1;
@@ -547,7 +592,7 @@ body{
     j.x=bx; j.y=by; j.a = Math.atan2(H/2-by, W/2-bx) + rand(-.8,.8);
     j.pts=[{x:bx,y:by,t:time}]; j.born=time; j.alive=true; j.protect=PROTECT; j.stall=0; j.boost=false; j.kills=0;
     j.fuel = START_LEN;                                   // every new jet, you or a respawning bot, starts at length 30
-    j.life = j.isPlayer ? lifeOf(j.fuel) : BOT_LIFE; j.runBest = j.fuel;
+    j.life = isHuman(j) ? lifeOf(j.fuel) : BOT_LIFE; j.runBest = j.fuel;
     j.rollT = 0; j.rollCD = 0; j.rollDir = 1; j.rollShield = false; j.passOwner = null; j.boostT = 0; j.av = 0;
     j.slip = 0; j.slipOn = false; j.draftT = 0; j.slipLost = 0; j.fadeIdx = 0;
     j.buff = null; j.streak = 0; j.lastKillAt = -99; j.flares = 0; j.score = 0; j.crownT = 0;
@@ -573,13 +618,16 @@ body{
   }
 
   const newOrb = () => ({ x:rand(30,W-30), y:rand(30,H-30), v:1, r:3.2, type:0, ph:rand(0,6) });
+  // every orb gets an id; a room host reports adds and removals to guests
+  let orbSeq = 1; const orbAdds = [], orbDels = [];
+  function addOrb(o){ o.id = orbSeq++; orbs.push(o); if (net.role === 'host') orbAdds.push(o); return o; }
 
   // ---- setup ----
   const player = makeJet({ isPlayer:true, name:'YOU', color:COL.you });
   jets.push(player);
   PERSONAS.forEach((p,i) => { const b = makeJet({ persona:p, color:BOT_COLORS[i], skill:SKILL[p], noise:NOISE[p] }); jets.push(b); b.name = newName(); });
   jets.forEach(j => { if (!j.isPlayer) spawn(j); });
-  for (let i=0;i<ORBS;i++) orbs.push(newOrb());
+  for (let i=0;i<ORBS;i++) addOrb(newOrb());
 
   // ================= INPUT =================
   const pointer = { down:false, x:0, y:0, ox:0, oy:0, sx:0, sy:0, downAt:0, id:null, a0:0 };
@@ -623,7 +671,7 @@ body{
     const sdx = e.clientX - pointer.sx, sdy = e.clientY - pointer.sy;
     // barrel roll: an upward swipe of 60px+ that ends with the thumb lifting, all within 300ms
     if (state === 'play' && dur < SWIPE_MS && -sdy >= SWIPE_PX && Math.abs(sdy) > Math.abs(sdx) && pointer.sy < innerHeight - SWIPE_DEAD){
-      if (startRoll(player, sdx >= 0 ? 1 : -1)){ player.av = 0; rolledOnce(); }
+      if (requestRoll(sdx >= 0 ? 1 : -1)){ player.av = 0; rolledOnce(); }
     }
     lastTapWasTap = dur < 200 && Math.hypot(sdx, sdy) < 14;
     pointer.down = false; boostHeld = false; lastUp = now;
@@ -636,13 +684,40 @@ body{
     if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.l = true;
     if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.r = true;
     if (e.key===' '||e.key==='Shift'){ keys.boost = true; if (state==='play') e.preventDefault(); }
-    if ((e.key==='ArrowUp'||e.key==='w'||e.key==='W') && state==='play' && !e.repeat) startRoll(player, 1);
+    if ((e.key==='ArrowUp'||e.key==='w'||e.key==='W') && state==='play' && !e.repeat) requestRoll(1);
   });
   addEventListener('keyup', e => {
     if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.l = false;
     if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.r = false;
     if (e.key===' '||e.key==='Shift') keys.boost = false;
   });
+
+  // What this device's controls are asking for right now (sent to the host when you're a room guest)
+  const NO_INTENT = { sa:null, hv:0, kk:0, boost:false };
+  function localIntent(){
+    const age = performance.now() - pointer.downAt, sdx = pointer.x - pointer.sx, sdy = pointer.y - pointer.sy;
+    const swipeLike = pointer.down && pointer.sy < innerHeight - SWIPE_DEAD && age < SWIPE_MS && -sdy > 12 && -sdy > Math.abs(sdx) && -sdy/Math.max(age, 1) > .15;
+    let sa = null, hv = 0;
+    if (pointer.down && !swipeLike){
+      if (steerMode === 'stick'){
+        const dx = pointer.x - pointer.ox, dy = pointer.y - pointer.oy;
+        if (dx*dx+dy*dy > 196) sa = Math.atan2(dy,dx);           // the direction you're dragging
+      } else {
+        const now = performance.now(); let sum = 0, held = 0;
+        for (const t of touches.values()){ sum += t.x < cw/2 ? -1 : 1; held = Math.max(held, (now - t.downAt)/1000); }
+        hv = clamp(sum, -1, 1) * (4.2 + Math.min(1, held/.4)*4.1);
+      }
+    }
+    return { sa, hv, kk: (keys.r?1:0) - (keys.l?1:0), boost: (pointer.down && boostHeld) || touches.size >= 2 || padHeld || keys.boost };
+  }
+  function applyIntent(j, I, dt){
+    let want = 0;
+    if (I.sa !== null && I.sa !== undefined){ const d = angDiff(j.a, I.sa); want = clamp(d*12, -TURN, TURN); }
+    else if (I.hv) want = clamp(I.hv, -TURN, TURN);
+    if (I.kk) want = clamp(I.kk, -1, 1)*TURN;
+    j.av = (j.av||0) + (want - (j.av||0)) * Math.min(1, dt*18);
+    j.boost = !!I.boost;
+  }
 
   // ================= HELPERS =================
   // a trail point is deadly if it is not in the owner's newest SAFE points and has not started fading
@@ -673,6 +748,7 @@ body{
     else j.buff = { type, until: time + B.dur, dur: B.dur };
     burst(j.x, j.y, B.color, 18, .8);
     if (j.isPlayer){ toast(B.name.toUpperCase() + '!', 'buff-' + type); sfx('buff'); }
+    else if (j.remote) tell(j, { k:'toast', text: B.name.toUpperCase() + '!', kind:'buff-' + type, sfx:'buff' });
     else if (state === 'play') toast(`${j.name} grabbed ${B.name}`, '');
     dlog('BUFF picked', { type, by:j.name });
   }
@@ -681,7 +757,7 @@ body{
     const ai = b.ai, p = b.persona;
     let gx = null, gy = null;
     let nearest = null, nd = 1e9;
-    for (const o of jets){ if (o===b || !o.alive || ((p==='cutter' || ai.mode==='hunt') && time - (o.born||0) < 25)) continue; const d = Math.hypot(o.x-b.x, o.y-b.y); const w = o.isPlayer ? d*(o === bounty ? .5 : .6) : d; /* .6 -> .5: 20% more pull toward a bounty-holding player */ if (w<nd){ nd=w; nearest=o; } }
+    for (const o of jets){ if (o===b || !o.alive || ((p==='cutter' || ai.mode==='hunt') && time - (o.born||0) < 25)) continue; const d = Math.hypot(o.x-b.x, o.y-b.y); const w = isHuman(o) ? d*(o === bounty ? .5 : .6) : d; /* .6 -> .5: 20% more pull toward a bounty-holding player */ if (w<nd){ nd=w; nearest=o; } }
 
     let bo = null, bs = 0, bod = 0;
     for (const o of orbs){
@@ -695,17 +771,20 @@ body{
 
     let diving = false;
     ai.trap = false; ai.evade = false;
-    if (p==='hunter' && player.alive && player.protect <= 0){
-      const dp = Math.hypot(player.x-b.x, player.y-b.y);
+    // hunters go after the nearest human (you, or a friend in a room)
+    let prey = null, pd = 1e9;
+    for (const o of jets){ if (isHuman(o) && o.alive && o.protect <= 0){ const d = Math.hypot(o.x-b.x, o.y-b.y); if (d < pd){ pd = d; prey = o; } } }
+    if (p==='hunter' && prey){
+      const dp = pd;
       if (dp < TRAP_RANGE){
         // trap: cut across your nose and boost to seal it off
         const lead = 90 + dp*.35;
-        gx = player.x + Math.cos(player.a)*lead; gy = player.y + Math.sin(player.a)*lead;
+        gx = prey.x + Math.cos(prey.a)*lead; gy = prey.y + Math.sin(prey.a)*lead;
         if (b.fuel > MIN_BOOST) ai.boostT = .35;
         diving = true; ai.trap = true;
       } else if (dp < STALK_RANGE){
         // stalk: hang off your wing, waiting for an opening
-        gx = player.x + Math.cos(player.a + ai.side*1.2)*190; gy = player.y + Math.sin(player.a + ai.side*1.2)*190;
+        gx = prey.x + Math.cos(prey.a + ai.side*1.2)*190; gy = prey.y + Math.sin(prey.a + ai.side*1.2)*190;
         diving = true;
       }
     }
@@ -854,7 +933,7 @@ body{
     // the wreck drops ~80% of its fuel along the trail (minimum 25 so every kill pays)
     const st = j.pts.length>60 ? 3 : 2, count = Math.max(1, Math.ceil(j.pts.length/st));
     const per = Math.max(25, j.fuel*.8) * (wasBounty ? 2 : 1) * (revengeHit ? 2 : 1) / count;   // bounty doubles it, revenge doubles it again
-    for (let k=0;k<j.pts.length;k+=st){ const p=j.pts[k]; const sa = rand(0, 6.283), sr = rand(6, 22); orbs.push({ x:p.x+Math.cos(sa)*sr, y:p.y+Math.sin(sa)*sr, v:per, r:4.6, type:2, c:j.color, life:20, ph:rand(0,6) }); }
+    for (let k=0;k<j.pts.length;k+=st){ const p=j.pts[k]; const sa = rand(0, 6.283), sr = rand(6, 22); addOrb({ x:p.x+Math.cos(sa)*sr, y:p.y+Math.sin(sa)*sr, v:per, r:4.6, type:2, c:j.color, life:20, ph:rand(0,6) }); }
     if (j.isPlayer){
       burst(j.x, j.y, COL.you, 140, 4); burst(j.x, j.y, COL.drop, 70, 3); burst(j.x, j.y, '#ff7a2f', 50, 2);
       rings.push({ x:j.x, y:j.y, t:0, c:COL.you, R:560 }, { x:j.x, y:j.y, t:-.08, c:COL.drop, R:380 });
@@ -868,13 +947,16 @@ body{
       if (wasBounty){
         dlog('BOUNTY claimed', { by:killer.name, on:j.name, drop:'2x' });
         if (killer.isPlayer){ toast('BOUNTY CLAIMED!', 'bounty-claim'); sfx('bounty'); rings.push({ x:j.x, y:j.y, t:-.05, c:GOLD, R:320 }); }
+        else if (killer.remote) tell(killer, { k:'toast', text:'BOUNTY CLAIMED!', kind:'bounty-claim', sfx:'bounty' });
       } else if (killer.isPlayer){ toast(`Splashed ${j.name}!`, 'kill'); sfx('kill'); }
-      if (killer.isPlayer){
+      else if (killer.remote) tell(killer, { k:'toast', text:`Splashed ${j.name}!`, kind:'kill', sfx:'kill' });
+      if (isHuman(killer)){
         // a streak only continues if this kill came within 4s of the last one
         killer.streak = (time - (killer.lastKillAt ?? -99) <= STREAK_GAP) ? (killer.streak||0) + 1 : 1;
         killer.lastKillAt = time;
         const call = { 2:'DOUBLE SPLASH', 3:'TRIPLE SPLASH', 5:'AIRSPACE CLEARED' }[killer.streak];
-        if (call){ banner(call, 'streak-' + killer.streak); sfx('streak', killer.streak); dlog('STREAK', { kills:killer.streak, call }); }
+        if (call && killer.isPlayer){ banner(call, 'streak-' + killer.streak); sfx('streak', killer.streak); dlog('STREAK', { kills:killer.streak, call }); }
+        else if (call) tell(killer, { k:'banner', text:call, kind:'streak-' + killer.streak, n:killer.streak });
       }
     }
     if (wasBounty){ bounty = null; updateBounty(); }   // hand the crown on immediately
@@ -888,54 +970,67 @@ body{
       revenge = killer && !killer.isPlayer ? killer : null;
       if (revenge) dlog('REVENGE marked', { on:revenge.name });
     }
+    const deathStats = () => ({
+      rank: 1 + jets.filter(o => o!==j && o.alive && sortKey(o, j) < 0).length, of: jets.length,
+      runLen: Math.floor(j.runBest), kills: j.kills, secs: Math.round(time - (j.isPlayer ? flightStart : j.born)),
+      score: Math.floor(j.score), crownT: Math.floor(j.crownT || 0), by: killer ? (killer.isPlayer && net.role === 'host' ? net.name : killer.name) : 'unknown', x: j.x, y: j.y
+    });
     if (j.isPlayer){
-      const rank = 1 + jets.filter(o => o!==j && o.alive && sortKey(o, j) < 0).length;
-      const runLen = Math.floor(j.runBest);
-      let newBest, showLen, showKills;
-      if (mod){
-        // today's best, saved under today's date
-        let db = { len:0, kills:0 }; try { db = Object.assign(db, JSON.parse(ls.get('contrail-daily-' + TODAY_KEY) || '{}')); } catch(e) {}
-        newBest = runLen > db.len || j.kills > db.kills;
-        db.len = Math.max(db.len, runLen); db.kills = Math.max(db.kills, j.kills); db.mod = TODAY.key;
-        ls.set('contrail-daily-' + TODAY_KEY, JSON.stringify(db));
-        showLen = db.len; showKills = db.kills;
-        $('d-bestlabel').textContent = "TODAY'S BEST · " + TODAY.name.toUpperCase();
-      } else {
-        newBest = runLen > bestLen || j.kills > bestKills;
-        if (runLen > bestLen){ bestLen = runLen; ls.set('contrail-best-length', bestLen); }
-        if (j.kills > bestKills){ bestKills = j.kills; ls.set('contrail-best-kills', bestKills); }
-        showLen = bestLen; showKills = bestKills;
-        $('d-bestlabel').textContent = 'BEST · LENGTH / KILLS';
-      }
-      deathPos = { x:j.x, y:j.y }; state = 'dead';
-      track('death');
-      $('d-new').hidden = !newBest;
-      $('d-best').textContent = showLen;
-      $('d-bestk').textContent = showKills;
-      $('d-by').textContent = killer ? killer.name : 'unknown';
-      $('d-revenge').hidden = !revenge;
-      if (revenge) $('d-revenge').textContent = `${revenge.name} is marked with a red skull. Splash it for double length.`;
-      $('d-trail').textContent = runLen;
-      $('d-rank').textContent = `#${rank} of ${jets.length}`;
-      $('d-kills').textContent = j.kills;
-      $('d-time').textContent = Math.round(time - flightStart) + 's';
-      $('d-score').textContent = Math.floor(j.score);
-      $('d-crowned').hidden = j.crownT < 1;
-      $('d-crowned').textContent = `Crowned ${Math.floor(j.crownT)}s`;
-      pointer.down = false; boostHeld = false; touches.clear(); padOff();
-      lenDrop = 0; $('lenDelta').classList.remove('on'); pendingCC = null;
-      hideRollTip();
-      setTimeout(() => { $('toasts').replaceChildren(); pad.hidden = true; $('overlay').hidden = false; $('menu').hidden = true; $('death').hidden = false; $('again').disabled = true; }, 500);
-      setTimeout(() => { $('again').disabled = false; $('again').focus({ preventScroll:true }); }, 1000);
+      showDeath(deathStats());
+    } else if (j.remote){
+      j.respawn = Infinity;                                // waits for that friend to tap Fly again
+      tell(j, Object.assign({ k:'died' }, deathStats()));
     } else {
       j.respawn = BOT_RESPAWN;
     }
     j.pts = [];
   }
 
+  // The death screen, from a set of numbers (yours, or the ones a room host sent you)
+  function showDeath(st){
+    const runLen = st.runLen;
+    let newBest, showLen, showKills;
+    if (mod){
+      // today's best, saved under today's date
+      let db = { len:0, kills:0 }; try { db = Object.assign(db, JSON.parse(ls.get('contrail-daily-' + TODAY_KEY) || '{}')); } catch(e) {}
+      newBest = runLen > db.len || st.kills > db.kills;
+      db.len = Math.max(db.len, runLen); db.kills = Math.max(db.kills, st.kills); db.mod = TODAY.key;
+      ls.set('contrail-daily-' + TODAY_KEY, JSON.stringify(db));
+      showLen = db.len; showKills = db.kills;
+      $('d-bestlabel').textContent = "TODAY'S BEST · " + TODAY.name.toUpperCase();
+    } else {
+      newBest = runLen > bestLen || st.kills > bestKills;
+      if (runLen > bestLen){ bestLen = runLen; ls.set('contrail-best-length', bestLen); }
+      if (st.kills > bestKills){ bestKills = st.kills; ls.set('contrail-best-kills', bestKills); }
+      showLen = bestLen; showKills = bestKills;
+      $('d-bestlabel').textContent = 'BEST · LENGTH / KILLS';
+    }
+    deathPos = { x:st.x, y:st.y }; state = 'dead';
+    track('death');
+    $('d-new').hidden = !newBest;
+    $('d-best').textContent = showLen;
+    $('d-bestk').textContent = showKills;
+    $('d-by').textContent = st.by;
+    $('d-revenge').hidden = !revenge;
+    if (revenge) $('d-revenge').textContent = `${revenge.name} is marked with a red skull. Splash it for double length.`;
+    $('d-trail').textContent = runLen;
+    $('d-rank').textContent = `#${st.rank} of ${st.of}`;
+    $('d-kills').textContent = st.kills;
+    $('d-time').textContent = st.secs + 's';
+    $('d-score').textContent = st.score;
+    $('d-crowned').hidden = st.crownT < 1;
+    $('d-crowned').textContent = `Crowned ${st.crownT}s`;
+    $('d-room').hidden = net.role === 'solo';
+    pointer.down = false; boostHeld = false; touches.clear(); padOff();
+    lenDrop = 0; $('lenDelta').classList.remove('on'); pendingCC = null;
+    hideRollTip();
+    setTimeout(() => { $('toasts').replaceChildren(); pad.hidden = true; $('overlay').hidden = false; $('menu').hidden = true; $('rooms').hidden = true; $('death').hidden = false; $('again').disabled = true; }, 500);
+    setTimeout(() => { $('again').disabled = false; $('again').focus({ preventScroll:true }); }, 1000);
+  }
+
   function spawnDrop(){
     const x = rand(400,W-400), y = rand(400,H-400);
-    for (let i=0;i<46;i++){ const a=rand(0,6.283), r=Math.sqrt(Math.random())*90; orbs.push({ x:x+Math.cos(a)*r, y:y+Math.sin(a)*r, v:1.4, r:4.2, type:1, life:DROP_LIFE, ph:rand(0,6) }); }
+    for (let i=0;i<46;i++){ const a=rand(0,6.283), r=Math.sqrt(Math.random())*90; addOrb({ x:x+Math.cos(a)*r, y:y+Math.sin(a)*r, v:1.4, r:4.2, type:1, life:DROP_LIFE, ph:rand(0,6) }); }
     drop = { x, y, until: time + DROP_LIFE };
     dropCount += 46;
     if (state==='play') toast('Fuel drop on the minimap, 8s', 'drop');
@@ -947,7 +1042,7 @@ body{
     time += dt;
     for (const j of jets){
       if (!j.alive){
-        if (!j.isPlayer){ j.respawn -= dt; if (j.respawn<=0){ j.name = newName(); spawn(j); } }
+        if (!isHuman(j)){ j.respawn -= dt; if (j.respawn<=0){ j.name = newName(); spawn(j); } }   // humans respawn when they tap Fly again
         continue;
       }
       if (j.protect>0) j.protect -= dt;
@@ -962,22 +1057,9 @@ body{
       if (j.rollCD>0) j.rollCD = Math.max(0, j.rollCD - dt);
       let target = null, turn = TURN;
       if (j.isPlayer){
-        let want = 0;
-        const age = performance.now() - pointer.downAt, sdx = pointer.x - pointer.sx, sdy = pointer.y - pointer.sy;
-        const swipeLike = pointer.down && pointer.sy < innerHeight - SWIPE_DEAD && age < SWIPE_MS && -sdy > 12 && -sdy > Math.abs(sdx) && -sdy/Math.max(age, 1) > .15;
-        if (pointer.down && !swipeLike){
-          if (steerMode === 'stick'){
-            const dx = pointer.x - pointer.ox, dy = pointer.y - pointer.oy;
-            if (dx*dx+dy*dy > 196){ const d = angDiff(j.a, Math.atan2(dy,dx)); want = clamp(d*12, -TURN, TURN); }
-          } else {
-            const now = performance.now(); let sum = 0, held = 0;
-            for (const t of touches.values()){ sum += t.x < cw/2 ? -1 : 1; held = Math.max(held, (now - t.downAt)/1000); }
-            want = clamp(sum, -1, 1) * (4.2 + Math.min(1, held/.4)*4.1);
-          }
-        }
-        const kk = (keys.r?1:0) - (keys.l?1:0); if (kk) want = kk*TURN;
-        j.av = (j.av||0) + (want - (j.av||0)) * Math.min(1, dt*18);
-        j.boost = (pointer.down && boostHeld) || touches.size >= 2 || padHeld || keys.boost;
+        applyIntent(j, localIntent(), dt);
+      } else if (j.remote){
+        applyIntent(j, j.input || NO_INTENT, dt);           // a friend's jet: steered by what their phone sends
       } else {
         if (j.ai.phase === 'warn' && time >= j.ai.phaseEnd) j.ai.t = 0;
         j.ai.t -= dt;
@@ -993,8 +1075,8 @@ body{
         if (!boostTip && j.fuel >= MIN_BOOST){ boostTip = true; toast(steerMode === 'stick' ? 'Boost ready: double-tap and hold' : 'Boost ready: hold the boost pad'); }
         if (!rollTip && time - flightStart > 3.2 && j.rollCD <= 0){ rollTip = true; showRollTip(); }
       }
-      if (j.stall>0){ j.stall -= dt; if (j.isPlayer) j.av = 0; }
-      else if (j.isPlayer){ j.a += j.av*dt; }
+      if (j.stall>0){ j.stall -= dt; if (isHuman(j)) j.av = 0; }
+      else if (isHuman(j)){ j.a += j.av*dt; }
       else if (target!==null){ const d = angDiff(j.a, target), mx = turn*dt; j.a += clamp(d,-mx,mx); }
       let sp = (j.boost ? BOOST : SPEED) * (1 + slipGain()*j.slip);   // slip is 0..1
       if (j.stall>0) sp *= .35;
@@ -1009,7 +1091,7 @@ body{
           if (tail && sparkT <= 0){ sparkT = .08; burst(tail.x, tail.y, '#ff9a4d', 3, .35); }
         }
       }
-      j.life = j.isPlayer ? lifeOf(j.fuel) : BOT_LIFE;
+      j.life = isHuman(j) ? lifeOf(j.fuel) : BOT_LIFE;
       if (j.fuel > j.runBest) j.runBest = j.fuel;   // longest you got this run
       j.x += Math.cos(j.a)*sp*dt; j.y += Math.sin(j.a)*sp*dt;
 
@@ -1018,18 +1100,7 @@ body{
       if (j.y<0){ j.y=0; j.a=-j.a; hit=true; } else if (j.y>H){ j.y=H; j.a=-j.a; hit=true; }
       if (hit){ j.stall = .45; if (j.isPlayer) burst(j.x, j.y, COL.edge, 8); }
 
-      const lp = j.pts[j.pts.length-1];
-      if (!lp || Math.hypot(j.x-lp.x, j.y-lp.y) >= SEG) j.pts.push({ x:j.x, y:j.y, t:time, r: j.rollT > 0, w: hasBuff(j, 'wide') });   // r: laid mid-roll, w: laid under Wide Trail
-      // points expire by age, not count
-      // the drawn trail never runs past TRAIL_CAP points: shorten its lifetime so the oldest stretch still fades out normally
-      if (j.pts.length > TRAIL_CAP) j.life = Math.min(j.life, time - j.pts[j.pts.length - TRAIL_CAP].t);
-      let cut = 0; while (cut < j.pts.length-2 && time - j.pts[cut].t > j.life) cut++;
-      if (cut) j.pts.splice(0, cut);
-      let fi = 0; while (fi < j.pts.length-1 && time - j.pts[fi].t >= j.life - FADE) fi++;
-      j.fadeIdx = fi;                                          // points before this are fading and harmless
-      let x0=j.x, y0=j.y, x1=j.x, y1=j.y;
-      for (const p of j.pts){ if (p.x<x0)x0=p.x; if (p.x>x1)x1=p.x; if (p.y<y0)y0=p.y; if (p.y>y1)y1=p.y; }
-      j.bb[0]=x0; j.bb[1]=y0; j.bb[2]=x1; j.bb[3]=y1;
+      trailTick(j);
     }
 
     // collisions + slipstream, measured to trail SEGMENTS (no gaps between points), live part only
@@ -1115,6 +1186,7 @@ body{
           j.rollShield = false; j.passOwner = o; j.passAt = time;   // spent on the first trail, immediately
           burst(j.x, j.y, '#ffffff', 12, .7);
           if (j.isPlayer){ toast(`Rolled through ${o.name}`, 'kill'); sfx('pass'); dlog('ROLL shield used', { on:o.name, shield:'off' }); }
+          else if (j.remote) tell(j, { k:'toast', text:`Rolled through ${o.name}`, kind:'kill', sfx:'pass' });
           continue;
         }
         killer = o; break;
@@ -1138,7 +1210,7 @@ body{
     // fuel
     let n0 = 0; dropCount = 0;
     for (const o of orbs){ if (o.type===0) n0++; else if (o.type===1) dropCount++; }
-    for (let i=0;i<4 && n0<ORBS;i++,n0++) orbs.push(newOrb());
+    for (let i=0;i<4 && n0<ORBS;i++,n0++) addOrb(newOrb());
     for (let i=orbs.length-1;i>=0;i--){
       const o = orbs[i]; let gone = false;
       if (o.life!==undefined){ o.life -= dt; if (o.life<=0) gone = true; }
@@ -1149,10 +1221,10 @@ body{
           if (dx>64||dx<-64||dy>64||dy<-64) continue;
           const d2 = dx*dx+dy*dy;
           if (d2 < 22*22){ j.fuel += o.v * (mod === 'fuel' && o.type !== 2 ? 3 : 1); gone = true; break; }   // Fuel Rush: map fuel 3x
-          else if (d2 < 64*64){ const pull = j.isPlayer ? 6 : 4; o.x += dx*dt*pull; o.y += dy*dt*pull; }
+          else if (d2 < 64*64){ const pull = isHuman(j) ? 6 : 4; o.x += dx*dt*pull; o.y += dy*dt*pull; }
         }
       }
-      if (gone){ orbs[i] = orbs[orbs.length-1]; orbs.pop(); }
+      if (gone){ if (net.role === 'host') orbDels.push(o.id); orbs[i] = orbs[orbs.length-1]; orbs.pop(); }
     }
     dropT -= dt;
     if (dropT<=0){ spawnDrop(); dropT = DROP_EVERY; }
@@ -1166,10 +1238,28 @@ body{
     if (drop && (dropCount<=4 || time >= drop.until)) drop = null;
 
     bountyT -= dt; if (bountyT <= 0){ bountyT = .25; updateBounty(); bountyToasts(); }
+    fxStep(dt);
+  }
+  function fxStep(dt){
     if (shake>0) shake -= dt;
     for (let i=rings.length-1;i>=0;i--){ rings[i].t += dt; if (rings[i].t > .55) rings.splice(i,1); }
     for (let i=floaters.length-1;i>=0;i--){ floaters[i].t += dt; if (floaters[i].t > 1.1) floaters.splice(i,1); }
     for (let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.96; p.vy*=.96; if (p.life<=0){ parts[i]=parts[parts.length-1]; parts.pop(); } }
+  }
+  // lay trail points as a jet moves, expire old ones, and mark where the harmless fading part starts
+  function trailTick(j){
+      const lp = j.pts[j.pts.length-1];
+      if (!lp || Math.hypot(j.x-lp.x, j.y-lp.y) >= SEG) j.pts.push({ x:j.x, y:j.y, t:time, r: j.rollT > 0, w: hasBuff(j, 'wide') });   // r: laid mid-roll, w: laid under Wide Trail
+      // points expire by age, not count
+      // the drawn trail never runs past TRAIL_CAP points: shorten its lifetime so the oldest stretch still fades out normally
+      if (j.pts.length > TRAIL_CAP) j.life = Math.min(j.life, time - j.pts[j.pts.length - TRAIL_CAP].t);
+      let cut = 0; while (cut < j.pts.length-2 && time - j.pts[cut].t > j.life) cut++;
+      if (cut) j.pts.splice(0, cut);
+      let fi = 0; while (fi < j.pts.length-1 && time - j.pts[fi].t >= j.life - FADE) fi++;
+      j.fadeIdx = fi;                                          // points before this are fading and harmless
+      let x0=j.x, y0=j.y, x1=j.x, y1=j.y;
+      for (const p of j.pts){ if (p.x<x0)x0=p.x; if (p.x>x1)x1=p.x; if (p.y<y0)y0=p.y; if (p.y>y1)y1=p.y; }
+      j.bb[0]=x0; j.bb[1]=y0; j.bb[2]=x1; j.bb[3]=y1;
   }
 
   // ================= CAMERA =================
@@ -1178,7 +1268,7 @@ body{
     let t;
     if (player.alive) t = player;
     else if (deathPos) t = deathPos;
-    else { let a = jets[attract]; if (!a || !a.alive){ attract = 1 + Math.floor(Math.random()*(jets.length-1)); a = jets[attract]; } t = a.alive ? a : cam; }
+    else { let a = jets[attract]; if (!a || !a.alive){ attract = 1 + Math.floor(Math.random()*(jets.length-1)); a = jets[attract]; } t = a && a.alive ? a : cam; }   // a guest's world can be empty until the first snapshot
     if (player.alive || deathPos){ cam.x = t.x; cam.y = t.y; }
     else { const k = Math.min(1, dt*10); cam.x += (t.x-cam.x)*k; cam.y += (t.y-cam.y)*k; }
     const life = player.alive ? player.life : LIFE_BASE;
@@ -1635,21 +1725,312 @@ body{
   setMode(gameMode);
   setSteer(steerMode);
   $('fly').addEventListener('click', fly);
-  $('again').addEventListener('click', fly);
+  $('again').addEventListener('click', () => net.role === 'guest' ? guestRespawn() : fly());
   addEventListener('keydown', e => {
     if (e.key !== 'Enter' || $('overlay').hidden) return;
-    if (!$('menu').hidden) fly(); else if (!$('death').hidden && !$('again').disabled) fly();
+    if (!$('menu').hidden) fly(); else if (!$('death').hidden && !$('again').disabled) (net.role === 'guest' ? guestRespawn() : fly());
   });
+
+
+  // ================= MULTIPLAYER: PRIVATE ROOMS =================
+  // The room creator's phone (the host) runs the whole game. A small relay server passes messages:
+  // each guest sends its controls to the host; the host sends everyone the world 15 times a second.
+  const qs = new URLSearchParams(location.search);
+  const RELAY_URL = qs.get('relay') || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'ws://127.0.0.1:8787' : 'wss://relay-production-f41f.up.railway.app');
+  const HUMAN_COLORS = ['#ff5ec4','#7dff4a','#00e5ff','#ffd400','#b388ff','#ff8a65','#64ffda'];
+  const SNAP_HZ = 15, IN_HZ = 20, INTERP_MS = 110;
+  const r1 = v => Math.round(v*10)/10, r2 = v => Math.round(v*100)/100;
+
+  function netSend(m){ if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); }
+  function tell(j, ev){ if (net.role === 'host' && j.remote) netSend(Object.assign({ t:'ev', to: j.netId }, ev)); }
+  function roomError(msg){ $('room-err').textContent = msg || ''; $('room-err').hidden = !msg; }
+  function setRoomBusy(b){ $('create').disabled = b; $('join').disabled = b; }
+
+  function connect(onOpen){
+    roomError('');
+    if (typeof WebSocket === 'undefined'){ roomError('Rooms need a newer browser.'); return; }
+    setRoomBusy(true);
+    let ws;
+    try { ws = new WebSocket(RELAY_URL); }
+    catch(e){ setRoomBusy(false); roomError("Can't reach the room server from here. Rooms work at contrail-io.netlify.app."); return; }
+    net.ws = ws;
+    const giveUp = setTimeout(() => {
+      if (ws.readyState !== 1){ try { ws.close(); } catch(e) {} setRoomBusy(false); roomError("The room server didn't answer. Check your connection and try again."); }
+    }, 8000);
+    ws.onopen = () => { clearTimeout(giveUp); onOpen(); };
+    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch(_) { return; } onNet(m); };
+    ws.onclose = () => { clearTimeout(giveUp); setRoomBusy(false); if (net.role !== 'solo') roomClosed('Lost the connection to the room.'); };
+    ws.onerror = () => {};
+  }
+
+  function onNet(m){
+    switch (m.t){
+      case 'created':
+        net.role = 'host'; net.code = m.code; net.myId = m.id; net.started = false;
+        dlog('ROOM created', { code:m.code }); showLobby(); break;
+      case 'joined':
+        net.role = 'guest'; net.code = m.code; net.myId = m.id; net.started = false;
+        dlog('ROOM joined', { code:m.code });
+        // the host's phone runs the world now; clear ours
+        jets.length = 0; orbs.length = 0; parts.length = 0; mirrors.clear(); net.snaps.length = 0;
+        buff = null; drop = null; bounty = null; revenge = null; player.alive = false; player.pts = [];
+        if (m.started) guestBegin(); else showLobby();
+        break;
+      case 'roster': net.roster = m.players; renderRoster(); break;
+      case 'error':
+        setRoomBusy(false); roomError(m.message);
+        net.role = 'solo'; try { net.ws.onclose = null; net.ws.close(); } catch(e) {} net.ws = null;
+        break;
+      // ---- host receives ----
+      case 'guest-join': if (net.role === 'host') addRemote(m.id, m.name); break;
+      case 'guest-leave': if (net.role === 'host') removeRemote(m.id); break;
+      case 'in': if (net.role === 'host') remoteInput(m); break;
+      case 'respawn': {
+        if (net.role !== 'host') break;
+        const j = remoteByNet(m.from); if (j && !j.alive && net.started) spawn(j);
+        break;
+      }
+      // ---- guest receives ----
+      case 'start': if (net.role === 'guest') guestBegin(); break;
+      case 'snap': if (net.role === 'guest') onSnap(m); break;
+      case 'orbs': if (net.role === 'guest'){ orbs.length = 0; for (const o of m.o) mirrorOrb(o); } break;
+      case 'ev': if (net.role === 'guest') onEvent(m); break;
+      case 'host-left': roomClosed('The host left, so the room closed.'); break;
+    }
+  }
+
+  // ---------- host ----------
+  const remoteByNet = id => jets.find(j => j.remote && j.netId === id);
+  function addRemote(id, name){
+    if (remoteByNet(id)) return;
+    // a friend takes a bot's seat (preferring a non-hunter), so the arena stays the same size
+    let bi = -1;
+    for (let i = jets.length-1; i >= 0; i--){ const b = jets[i]; if (!isHuman(b) && b.persona !== 'hunter'){ bi = i; break; } }
+    if (bi < 0) for (let i = jets.length-1; i >= 0; i--) if (!isHuman(jets[i])){ bi = i; break; }
+    const used = new Set(jets.filter(isHuman).map(j => j.color));
+    const color = HUMAN_COLORS.find(c => !used.has(c)) || HUMAN_COLORS[0];
+    const j = makeJet({ remote:true, netId:id, name, color, persona:'human', input: NO_INTENT, rs:0 });
+    if (bi >= 0){ const b = jets[bi]; if (b === bounty) bounty = null; if (b === revenge) revenge = null; jets.splice(bi, 1, j); }
+    else jets.push(j);
+    if (net.started) spawn(j);
+    netSend({ t:'orbs', to:id, o: orbs.map(packOrb) });       // their map starts identical to ours
+    if (state === 'play') toast(`${name} joined`, '');
+    dlog('ROOM friend joined', { name, seat: bi });
+  }
+  function removeRemote(id){
+    const i = jets.findIndex(j => j.remote && j.netId === id); if (i < 0) return;
+    const j = jets[i]; if (j === bounty) bounty = null; if (j === revenge) revenge = null;
+    const p = ['cutter','coward','builder'][Math.floor(Math.random()*3)];
+    const b = makeJet({ persona:p, color: BOT_COLORS[i % BOT_COLORS.length], skill:SKILL[p], noise:NOISE[p] });
+    b.name = newName(); spawn(b);
+    jets.splice(i, 1, b);                                    // a bot takes the empty seat
+    if (state === 'play') toast(`${j.name} left`, '');
+  }
+  function remoteInput(m){
+    const j = remoteByNet(m.from); if (!j) return;
+    j.input = { sa: typeof m.sa === 'number' ? m.sa : null, hv: +m.hv || 0, kk: +m.kk || 0, boost: !!m.boost };
+    if ((m.rs|0) > j.rs){ j.rs = m.rs|0; startRoll(j, m.rd === -1 ? -1 : 1); }
+  }
+  const packOrb = o => [o.id, Math.round(o.x), Math.round(o.y), o.type, o.r, o.c || 0, o.life !== undefined ? r1(o.life) : -1];
+  function packJet(j){
+    return [ j.uid, j.alive ? 1 : 0, r1(j.x), r1(j.y), r2(j.a), j.isPlayer ? net.name : j.name, j.color,
+      j.netId || (j.isPlayer ? net.myId : 0), j.boost ? 1 : 0, r2(j.rollT || 0), j.rollDir || 1,
+      j.buff ? j.buff.type : 0, j.buff ? r1(Math.max(0, j.buff.until - time)) : 0, j.buff ? j.buff.dur : 0,
+      j.protect > 0 ? r1(j.protect) : 0, r2(j.slip || 0), Math.floor(j.fuel), j.kills, Math.floor(j.score || 0), r2(j.life),
+      j.flares || 0, r1(j.rollCD || 0), Math.floor(j.crownT || 0), j.streak || 0, (time - (j.lastKillAt ?? -99)) <= STREAK_GAP ? 1 : 0,
+      (j.ai && (j.ai.phase === 'warn' || j.ai.trap)) ? 1 : 0 ];
+  }
+  function hostTick(dt){
+    if (net.roster.length < 2){ orbAdds.length = 0; orbDels.length = 0; return; }   // nobody to tell yet
+    net.sendT -= dt; if (net.sendT > 0) return;
+    net.sendT = 1/SNAP_HZ;
+    netSend({ t:'snap', mod, j: jets.map(packJet), oa: orbAdds.splice(0).map(packOrb), od: orbDels.splice(0),
+              b: buff ? [buff.type, r1(buff.x), r1(buff.y)] : 0, d: drop ? [r1(drop.x), r1(drop.y), r1(drop.until - time)] : 0 });
+  }
+  function hostStart(){
+    net.started = true;
+    netSend({ t:'start' });
+    for (const j of jets) if (j.remote && !j.alive) spawn(j);
+    fly();
+  }
+
+  // ---------- guest ----------
+  const mirrors = new Map();      // jet id -> the jet we draw for it
+  function mirrorOrb(a){
+    orbs.push({ id:a[0], x:a[1], y:a[2], type:a[3], r:a[4], c:a[5] || undefined, life: a[6] >= 0 ? a[6] : undefined, v:1, ph: rand(0,6) });
+  }
+  function onSnap(m){
+    const at = performance.now();
+    mod = m.mod || null;
+    $('modeTag').hidden = !mod; $('modeTag').textContent = mod ? 'TODAY: ' + TODAY.name.toUpperCase() : '';
+    if (m.od && m.od.length){ const del = new Set(m.od); orbs = orbs.filter(o => !del.has(o.id)); }
+    if (m.oa) for (const o of m.oa) mirrorOrb(o);
+    buff = m.b ? { type:m.b[0], x:m.b[1], y:m.b[2], t0:time } : null;
+    drop = m.d ? { x:m.d[0], y:m.d[1], until: time + m.d[2] } : null;
+    const map = new Map(); for (const a of m.j) map.set(a[0], a);
+    net.snaps.push({ at, map }); while (net.snaps.length > 6) net.snaps.shift();
+    // roster of jets: create, update, retire
+    const seen = new Set();
+    for (const a of m.j){
+      const uid = a[0], mine = a[7] === net.myId;
+      let j = mirrors.get(uid);
+      if (!j){ j = mine ? player : makeJet({}); j.uid = uid; j.pts = []; mirrors.set(uid, j); j.x = a[2]; j.y = a[3]; j.a = a[4]; }
+      seen.add(uid);
+      const alive = !!a[1];
+      if (j.alive && !alive){                              // just went down
+        if (!mine){ burst(j.x, j.y, j.color, 30); burst(j.x, j.y, COL.drop, 10); rings.push({ x:j.x, y:j.y, t:0, c:j.color, R:140 }); }
+        j.pts = [];
+      }
+      if (!j.alive && alive){ j.pts = []; j.x = a[2]; j.y = a[3]; j.a = a[4]; j.born = time; }   // fresh spawn: no trail from the old spot
+      j.alive = alive;
+      j.isPlayer = mine; j.name = mine ? 'YOU' : a[5]; j.color = mine ? COL.you : a[6];
+      j.boost = !!a[8]; j.rollT = a[9]; j.rollDir = a[10];
+      j.buff = a[11] ? { type:a[11], until: time + a[12], dur: a[13] } : null;
+      j.protect = a[14]; j.slip = a[15]; j.fuel = a[16]; j.kills = a[17]; j.score = a[18]; j.life = a[19];
+      j.flares = a[20]; j.rollCD = a[21]; j.crownT = a[22]; j.streak = a[23]; j.lastKillAt = a[24] ? time : -99;
+      j.ai = { phase: a[25] ? 'warn' : 'idle', trap:false };
+    }
+    for (const [uid, j] of mirrors) if (!seen.has(uid)){ mirrors.delete(uid); }
+    jets.length = 0; for (const a of m.j) jets.push(mirrors.get(a[0]));
+  }
+  let gFuel = 0, gBountyT = 0;
+  function guestStep(dt){
+    time += dt;
+    // draw jets ~110ms in the past, smoothly between the two snapshots around that moment
+    const rt = performance.now() - INTERP_MS, S = net.snaps;
+    let A = null, B = null;
+    for (let i = S.length - 1; i > 0; i--){ if (S[i-1].at <= rt){ A = S[i-1]; B = S[i]; break; } }
+    if (!B && S.length){ A = B = S[S.length-1]; }
+    if (B){
+      const k = B === A ? 1 : clamp((rt - A.at)/Math.max(1, B.at - A.at), 0, 1.15);
+      for (const j of jets){
+        const b = B.map.get(j.uid), a = A.map.get(j.uid) || b;
+        if (!b || !b[1]) continue;
+        const jump = !a[1] || Math.hypot(b[2]-a[2], b[3]-a[3]) > 400;
+        j.x = jump ? b[2] : a[2] + (b[2]-a[2])*k; j.y = jump ? b[3] : a[3] + (b[3]-a[3])*k; j.a = jump ? b[4] : angLerp(a[4], b[4], k);
+      }
+    }
+    for (const j of jets){
+      if (!j.alive) continue;
+      if (j.rollT > 0) j.rollT = Math.max(0, j.rollT - dt);
+      if (j.rollCD > 0) j.rollCD = Math.max(0, j.rollCD - dt);
+      if (j.protect > 0) j.protect -= dt;
+      trailTick(j);
+    }
+    for (const o of orbs) if (o.life !== undefined) o.life -= dt;
+    // your own jet: sounds, the "-N" length counter, tips, and sending your controls
+    if (player.alive){
+      if (player.boost !== wasBoosting){ if (player.boost) sfx('boost'); musicRate(player.boost ? 1.05 : 1); wasBoosting = player.boost; }
+      if (player.boost && player.fuel < gFuel){ lenDrop += gFuel - player.fuel; lastBurnAt = time; }
+      if (!boostTip && player.fuel >= MIN_BOOST){ boostTip = true; toast(steerMode === 'stick' ? 'Boost ready: double-tap and hold' : 'Boost ready: hold the boost pad'); }
+      if (!rollTip && time - flightStart > 3.2 && player.rollCD <= 0){ rollTip = true; showRollTip(); }
+    }
+    gFuel = player.fuel;
+    if (state === 'play'){
+      net.inT -= dt;
+      if (net.inT <= 0){
+        net.inT = 1/IN_HZ;
+        const I = localIntent();
+        netSend({ t:'in', sa: I.sa === null ? null : r2(I.sa), hv: r2(I.hv), kk: I.kk, boost: I.boost, rs: net.rollSeq, rd: net.rollDir });
+      }
+    }
+    gBountyT -= dt; if (gBountyT <= 0){ gBountyT = .25; updateBounty(); bountyToasts(); }
+    fxStep(dt);
+  }
+  function onEvent(m){
+    if (m.k === 'toast'){ toast(m.text, m.kind); if (m.sfx) sfx(m.sfx); }
+    else if (m.k === 'banner'){ banner(m.text, m.kind); if (audio.ctx && !audio.muted) try { SFX.streak(m.n); } catch(e) {} }
+    else if (m.k === 'died'){
+      burst(player.x, player.y, COL.you, 140, 4); burst(player.x, player.y, COL.drop, 70, 3); burst(player.x, player.y, '#ff7a2f', 50, 2);
+      rings.push({ x:player.x, y:player.y, t:0, c:COL.you, R:560 }, { x:player.x, y:player.y, t:-.08, c:COL.drop, R:380 });
+      shake = .5; sfx('death'); musicRate(1); humStop();
+      player.alive = false; player.pts = [];
+      m.x = player.x; m.y = player.y;
+      showDeath(m);
+    }
+  }
+  function requestRoll(dir){
+    if (net.role !== 'guest') return startRoll(player, dir);
+    if (!player.alive || player.rollT > 0 || (player.rollCD > 0 && !(player.flares > 0))) return false;
+    net.rollSeq++; net.rollDir = dir; net.inT = 0;           // goes out with the very next message
+    player.rollT = ROLL_T; player.rollDir = dir; sfx('roll');
+    return true;
+  }
+  function enterFlight(){
+    ensureAudio(); track('round-start');
+    $('overlay').hidden = true; $('menu').hidden = true; $('death').hidden = true; $('rooms').hidden = true;
+    ['stats','board','minimap'].forEach(id => $(id).hidden = false);
+    padOff(); pad.hidden = steerMode !== 'halves';
+    state = 'play'; flightStart = time; deathPos = null; wasBoosting = false; musicRate(1); humStop();
+    $('hint').hidden = false; $('hint').style.opacity = '1';
+    try { if (navigator.wakeLock && !wake) navigator.wakeLock.request('screen').then(w => { wake = w; w.addEventListener('release', () => { wake = null; }); }).catch(() => {}); } catch(e) {}
+  }
+  function guestBegin(){ net.started = true; enterFlight(); }
+  function guestRespawn(){ netSend({ t:'respawn' }); enterFlight(); }
+
+  // ---------- room screens ----------
+  function showRooms(){
+    $('menu').hidden = true; $('death').hidden = true; $('rooms').hidden = false; $('overlay').hidden = false;
+    $('room-pick').hidden = net.role !== 'solo'; $('lobby').hidden = net.role === 'solo';
+    $('pname').value = ls.get('contrail-name') || '';
+  }
+  function showLobby(){
+    setRoomBusy(false); roomError('');
+    $('room-pick').hidden = true; $('lobby').hidden = false;
+    $('lcode').textContent = net.code;
+    $('start').hidden = net.role !== 'host'; $('waiting').hidden = net.role === 'host';
+    $('room-back').textContent = 'Leave room';
+  }
+  function renderRoster(){
+    const ul = $('roster'); ul.replaceChildren();
+    for (const p of net.roster){
+      const li = document.createElement('li');
+      const n = document.createElement('span'); n.textContent = p.name + (p.id === net.myId ? ' (you)' : '');
+      const t = document.createElement('span'); t.className = 'tag'; t.textContent = p.host ? 'HOST' : 'PILOT';
+      li.append(n, t); ul.append(li);
+    }
+    $('seats').textContent = `${net.roster.length} of 8 pilots · bots fill the other seats`;
+  }
+  function roomClosed(msg){
+    net.role = 'solo';
+    $('overlay').hidden = false; $('menu').hidden = true; $('death').hidden = true; $('rooms').hidden = false;
+    $('room-pick').hidden = true; $('lobby').hidden = true;
+    roomError(msg); $('room-back').textContent = 'Back to menu';
+    $('room-back').onclick = () => location.reload();
+  }
+  const cleanName = v => String(v || '').toUpperCase().replace(/[^A-Z0-9 -]/g, '').trim().slice(0, 10) || 'PILOT';
+  $('friends').addEventListener('click', () => { ensureAudio(); showRooms(); });
+  $('create').addEventListener('click', () => {
+    net.name = cleanName($('pname').value); ls.set('contrail-name', net.name);
+    connect(() => netSend({ t:'create', name: net.name }));
+  });
+  $('join').addEventListener('click', () => {
+    const code = $('jcode').value.toUpperCase().replace(/[^A-Z]/g, '');
+    if (code.length !== 4){ roomError('Room codes are 4 letters.'); return; }
+    net.name = cleanName($('pname').value); ls.set('contrail-name', net.name);
+    connect(() => netSend({ t:'join', code, name: net.name }));
+  });
+  $('jcode').addEventListener('keydown', e => { if (e.key === 'Enter') $('join').click(); });
+  $('start').addEventListener('click', () => { ensureAudio(); hostStart(); });
+  $('room-back').addEventListener('click', () => {
+    if (net.role !== 'solo') { location.reload(); return; }      // leaving a room: start clean
+    $('rooms').hidden = true; $('menu').hidden = false; roomError('');
+  });
+  $('d-room').addEventListener('click', () => location.reload());
 
   // ================= LOOP =================
   let last = performance.now();
   function frame(now){
+    requestAnimationFrame(frame);                          // schedule first, so one bad frame can never stop the game
     let dt = Math.min(.05, (now-last)/1000); last = now;
     if (slowmo > 0){ slowmo -= dt; dt *= SLOWMO_RATE; }      // close-call slow motion (counted in real time)
-    const sub = Math.max(1, Math.ceil(BOOST*(1+slipGain())*dt / 4));
-    for (let i=0;i<sub;i++) step(dt/sub);
+    if (net.role === 'guest') guestStep(dt);
+    else {
+      const sub = Math.max(1, Math.ceil(BOOST*(1+slipGain())*dt / 4));
+      for (let i=0;i<sub;i++) step(dt/sub);
+      if (net.role === 'host') hostTick(dt);
+    }
     updateCam(dt); render(); drawMinimap(); hudTick(dt);
-    requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 })();
