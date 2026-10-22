@@ -216,6 +216,22 @@ body{
   border:1px solid var(--line); border-radius:8px; padding:12px; width:100%; box-sizing:border-box; user-select:text; -webkit-user-select:text; touch-action:manipulation}
 .card input::placeholder{color:rgba(147,164,204,.5)}
 .card input:focus-visible{outline:2px solid var(--fuel); outline-offset:1px}
+.duo{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+#hangar{gap:12px}
+#hgPrev{width:100%; height:100px; border:1px solid var(--line); border-radius:8px; background:rgba(5,11,29,.55); display:block}
+.hg-row{display:grid; gap:6px}
+.chips{display:flex; flex-wrap:wrap; gap:5px}
+.chip{position:relative; font-family:var(--display); font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--ink);
+  background:transparent; border:1px solid var(--line); border-radius:6px; padding:8px 10px; cursor:pointer; touch-action:manipulation}
+.chip[aria-pressed="true"]{border-color:var(--fuel); box-shadow:inset 0 0 0 1px var(--fuel); color:var(--fuel)}
+.chip.sw{width:30px; height:30px; padding:0; border-radius:50%}
+.chip.sw i{position:absolute; inset:4px; border-radius:50%; background:var(--c)}
+.chip.sw.match i{background:conic-gradient(var(--c) 0 50%, transparent 0); border:1px dashed var(--muted)}
+.chip.locked{opacity:.42}
+.chip.locked::after{content:''; position:absolute; right:-4px; top:-4px; width:11px; height:11px; border-radius:50%; background:#050b1d url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Crect x='2.5' y='5.5' width='7' height='5' rx='1' fill='%2393a4cc'/%3E%3Cpath d='M4 5.5V4a2 2 0 0 1 4 0v1.5' stroke='%2393a4cc' fill='none' stroke-width='1.4'/%3E%3C/svg%3E") center/9px no-repeat}
+.hg-hint{margin:0; min-height:2.6em; font-size:13px; line-height:1.35; color:var(--muted); text-align:center}
+.hg-hint b{color:var(--ink)}
+.unlock-line{cursor:pointer; text-decoration:underline; text-underline-offset:3px; margin:0; text-align:center; font-family:var(--display); font-weight:600; letter-spacing:.06em; color:var(--fuel); font-size:14px}
 .callrow{display:grid; grid-template-columns:auto 1fr; align-items:center; gap:10px}
 .callrow input{font-size:16px; padding:8px 10px}
 .joinrow{display:grid; grid-template-columns:1fr auto; gap:8px}
@@ -274,7 +290,7 @@ body{
     <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
     <div class="callrow"><label class="stat-label" for="callsign">CALLSIGN</label><input id="callsign" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MAVERICK"></div>
     <button class="btn" id="fly" type="button">Fly</button>
-    <button class="btn-ghost" id="friends" type="button">Play with friends</button>
+    <div class="duo"><button class="btn-ghost" id="friends" type="button">Friends</button><button class="btn-ghost" id="hangarBtn" type="button">Hangar</button></div>
     <ul class="howto">
       <li><span class="k">STEER</span><span id="howto-steer">Put your thumb down anywhere and drag the way you want to fly. Let go to fly straight.</span></li>
       <li><span class="k">BOOST</span><span id="howto-boost">Double-tap and hold, or add a second finger. Boosting burns fuel.</span></li>
@@ -294,7 +310,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine">v0.5.1 · 12 bots, or fly with friends</p>
+    <p class="fine">v0.6 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -312,10 +328,22 @@ body{
     <div class="rankrow"><span class="stat-label">SCORE</span><span id="d-score">0</span></div>
     <p class="crownline" id="d-crowned" hidden></p>
     <p class="revenge-line" id="d-revenge" hidden></p>
+    <p class="unlock-line" id="d-unlock" hidden></p>
     <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
     <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
     <button class="btn" id="again" type="button" disabled>Fly again</button>
     <button class="btn-ghost" id="d-room" type="button" hidden>Leave room</button>
+  </section>
+
+  <section class="card" id="hangar" hidden>
+    <h2 class="logo sm">Hangar</h2>
+    <canvas id="hgPrev" aria-label="Preview of your jet"></canvas>
+    <div class="hg-row"><span class="stat-label">SHAPE</span><div class="chips" id="hg-sh"></div></div>
+    <div class="hg-row"><span class="stat-label">JET COLOR</span><div class="chips" id="hg-c"></div></div>
+    <div class="hg-row"><span class="stat-label">TRAIL COLOR</span><div class="chips" id="hg-tc"></div></div>
+    <div class="hg-row"><span class="stat-label">TRAIL EFFECT</span><div class="chips" id="hg-fx"></div></div>
+    <p class="hg-hint" id="hg-hint"></p>
+    <button class="btn" id="hg-done" type="button">Done</button>
   </section>
 
   <section class="card" id="rooms" hidden>
@@ -433,7 +461,7 @@ body{
   addEventListener('hashchange', () => { DEBUG = location.hash === '#debug'; $('debug').hidden = !DEBUG; });
   let jets = [], orbs = [], parts = [];
   // multiplayer: 'solo' (just you and bots), 'host' (your phone runs the room), 'guest' (you fly in a friend's room)
-  const net = { role:'solo', ws:null, code:'', myId:0, roster:[], started:false, snaps:[], sendT:0, inT:0, rollSeq:0, rollDir:1, name:'' };
+  const net = { looks:{}, role:'solo', ws:null, code:'', myId:0, roster:[], started:false, snaps:[], sendT:0, inT:0, rollSeq:0, rollDir:1, name:'' };
   let boostTip = false, rollTip = false, shake = 0, rings = [];
   let state = 'menu', time = 0, dropT = 12, drop = null, dropCount = 0;
   let buff = null, buffT = BUFF_FIRST;
@@ -598,7 +626,7 @@ body{
     j.life = isHuman(j) ? lifeOf(j.fuel) : BOT_LIFE; j.runBest = j.fuel;
     j.rollT = 0; j.rollCD = 0; j.rollDir = 1; j.rollShield = false; j.passOwner = null; j.boostT = 0; j.av = 0;
     j.slip = 0; j.slipOn = false; j.draftT = 0; j.slipLost = 0; j.fadeIdx = 0;
-    j.buff = null; j.streak = 0; j.lastKillAt = -99; j.flares = 0; j.score = 0; j.crownT = 0;
+    j.buff = null; j.streak = 0; j.lastKillAt = -99; j.flares = 0; j.score = 0; j.crownT = 0; j.maxStreak = 0; j.cc = 0;
     j.ai = { t:rand(0,.2), want:j.a, cx:bx, cy:by, r:rand(180,340), dir:Math.random()<.5?1:-1, ct:rand(8,14),
              boostT:0, phase:'idle', phaseEnd:0, coolUntil:0, tgt:null, wx:rand(300,W-300), wy:rand(300,H-300),
              mode:'build', loopAcc:0, lastTh:null, trap:false, side: Math.random()<.5 ? 1 : -1,
@@ -626,7 +654,71 @@ body{
   function addOrb(o){ o.id = orbSeq++; orbs.push(o); if (net.role === 'host') orbAdds.push(o); return o; }
 
   // ---- setup ----
-  const player = makeJet({ isPlayer:true, name:'YOU', color:COL.you });
+  // ================= HANGAR: looks you unlock by playing (visual only, never changes hitboxes) =================
+  const LOOK_COLORS = [
+    { id:'ice',     name:'Ice',     hex:'#f4f8ff', glow:'#8ef0ff', body:'#ffffff' },
+    { id:'sky',     name:'Sky',     hex:'#5fd4ff' },
+    { id:'mint',    name:'Mint',    hex:'#7dff9b' },
+    { id:'coral',   name:'Coral',   hex:'#ff6b8a', need:{ k:'best',   n:300, d:'Reach length 300' } },
+    { id:'amber',   name:'Amber',   hex:'#ffb454', need:{ k:'streak', n:3,   d:'Get a Triple Splash' } },
+    { id:'violet',  name:'Violet',  hex:'#c58bff', need:{ k:'crown',  n:30,  d:'Wear the crown for 30s in one life' } },
+    { id:'magenta', name:'Magenta', hex:'#ff5ec4', need:{ k:'kills',  n:25,  d:'Splash 25 jets in total' } }
+  ];
+  const LOOK_SHAPES = [
+    { id:'dart',    name:'Dart' },
+    { id:'delta',   name:'Delta',     need:{ k:'best',  n:500, d:'Reach length 500' } },
+    { id:'twin',    name:'Twin-tail', need:{ k:'days',  n:3,   d:'Fly the Daily on 3 different days' } },
+    { id:'stealth', name:'Stealth',   need:{ k:'secs',  n:180, d:'Survive 3 minutes in one life' } }
+  ];
+  const LOOK_FX = [
+    { id:'std',     name:'Standard' },
+    { id:'pulse',   name:'Pulse',   need:{ k:'rounds', n:10, d:'Fly 10 rounds' } },
+    { id:'comet',   name:'Comet',   need:{ k:'cc',     n:20, d:'Pull off 20 close calls in total' } },
+    { id:'rainbow', name:'Rainbow', need:{ k:'streak', n:5,  d:'Clear the airspace: 5 splashes in a row' } }
+  ];
+  const byId = (list, id) => list.find(x => x.id === id);
+  // lifetime progress on this phone
+  const prog = Object.assign({ rounds:0, kills:0, cc:0, best:0, streak:0, crown:0, secs:0, days:[] },
+    (() => { try { return JSON.parse(ls.get('contrail-prog') || '{}'); } catch(e) { return {}; } })());
+  prog.best = Math.max(prog.best, +ls.get('contrail-best-length') || 0);
+  prog.kills = Math.max(prog.kills, +ls.get('contrail-best-kills') || 0);
+  const progVal = k => k === 'days' ? prog.days.length : (prog[k] || 0);
+  const isUnlocked = item => !item.need || progVal(item.need.k) >= item.need.n;
+  const ALL_LOOKS = () => [...LOOK_SHAPES.map(x => ['shape', x]), ...LOOK_COLORS.map(x => ['color', x]), ...LOOK_FX.map(x => ['trail effect', x])];
+  function recordRun(st, daily){
+    const before = new Set(ALL_LOOKS().filter(([, x]) => isUnlocked(x)).map(([, x]) => x.id));
+    prog.rounds++; prog.kills += st.kills || 0; prog.cc += st.cc || 0;
+    prog.best = Math.max(prog.best, st.runLen || 0); prog.streak = Math.max(prog.streak, st.streak || 0);
+    prog.crown = Math.max(prog.crown, st.crownT || 0); prog.secs = Math.max(prog.secs, st.secs || 0);
+    if (daily && !prog.days.includes(TODAY_KEY)) prog.days = [...prog.days, TODAY_KEY].slice(-30);
+    ls.set('contrail-prog', JSON.stringify(prog));
+    return ALL_LOOKS().filter(([, x]) => isUnlocked(x) && !before.has(x.id));
+  }
+  // your chosen look; anything not unlocked falls back to the free default
+  const myLook = Object.assign({ sh:'dart', c:'ice', tc:'match', fx:'std' }, (() => { try { return JSON.parse(ls.get('contrail-look') || '{}'); } catch(e) { return {}; } })());
+  function sanitizeLook(L, mine){
+    const ok = (list, id, dflt) => { const x = byId(list, id); return x && (!mine || isUnlocked(x)) ? id : dflt; };
+    return { sh: ok(LOOK_SHAPES, L && L.sh, 'dart'), c: ok(LOOK_COLORS, L && L.c, 'ice'),
+             tc: L && L.tc === 'match' ? 'match' : ok(LOOK_COLORS, L && L.tc, 'match'), fx: ok(LOOK_FX, L && L.fx, 'std') };
+  }
+  Object.assign(myLook, sanitizeLook(myLook, true));
+  const lookHex = L => byId(LOOK_COLORS, L.c).hex;
+  function trailCols(L){
+    const t = byId(LOOK_COLORS, L.tc === 'match' ? L.c : L.tc);
+    return { core: t.hex, glow: t.glow || t.hex };
+  }
+  const packLook = L => L ? [L.sh, L.c, L.tc, L.fx].join('.') : 0;
+  const unpackLook = v => { if (!v || typeof v !== 'string') return null; const [sh, c, tc, fx] = v.split('.'); return sanitizeLook({ sh, c, tc, fx }, false); };
+  function jetPath(c, sh, s){
+    c.beginPath();
+    if (sh === 'delta'){ c.moveTo(13*s,0); c.lineTo(-9*s,-9*s); c.lineTo(-6*s,0); c.lineTo(-9*s,9*s); }
+    else if (sh === 'twin'){ c.moveTo(12*s,0); c.lineTo(-2*s,-8*s); c.lineTo(-9*s,-8*s); c.lineTo(-6*s,-3*s); c.lineTo(-9*s,0); c.lineTo(-6*s,3*s); c.lineTo(-9*s,8*s); c.lineTo(-2*s,8*s); }
+    else if (sh === 'stealth'){ c.moveTo(11*s,0); c.lineTo(-5*s,-10*s); c.lineTo(-8*s,-6*s); c.lineTo(-5*s,-2.5*s); c.lineTo(-8*s,0); c.lineTo(-5*s,2.5*s); c.lineTo(-8*s,6*s); c.lineTo(-5*s,10*s); }
+    else { c.moveTo(12*s,0); c.lineTo(-8*s,-7*s); c.lineTo(-4*s,0); c.lineTo(-8*s,7*s); }
+    c.closePath();
+  }
+
+  const player = makeJet({ isPlayer:true, name:'YOU', color: lookHex(myLook), look: myLook });
   jets.push(player);
   PERSONAS.forEach((p,i) => { const b = makeJet({ persona:p, color:BOT_COLORS[i], skill:SKILL[p], noise:NOISE[p] }); jets.push(b); b.name = newName(); });
   jets.forEach(j => { if (!j.isPlayer) spawn(j); });
@@ -956,7 +1048,7 @@ body{
       if (isHuman(killer)){
         // a streak only continues if this kill came within 4s of the last one
         killer.streak = (time - (killer.lastKillAt ?? -99) <= STREAK_GAP) ? (killer.streak||0) + 1 : 1;
-        killer.lastKillAt = time;
+        killer.lastKillAt = time; killer.maxStreak = Math.max(killer.maxStreak || 0, killer.streak);
         const call = { 2:'DOUBLE SPLASH', 3:'TRIPLE SPLASH', 5:'AIRSPACE CLEARED' }[killer.streak];
         if (call && killer.isPlayer){ banner(call, 'streak-' + killer.streak); sfx('streak', killer.streak); dlog('STREAK', { kills:killer.streak, call }); }
         else if (call) tell(killer, { k:'banner', text:call, kind:'streak-' + killer.streak, n:killer.streak });
@@ -976,7 +1068,7 @@ body{
     const deathStats = () => ({
       rank: 1 + jets.filter(o => o!==j && o.alive && sortKey(o, j) < 0).length, of: jets.length,
       runLen: Math.floor(j.runBest), kills: j.kills, secs: Math.round(time - (j.isPlayer ? flightStart : j.born)),
-      score: Math.floor(j.score), crownT: Math.floor(j.crownT || 0), by: killer ? (killer.isPlayer && net.role === 'host' ? net.name : killer.name) : 'unknown', x: j.x, y: j.y
+      score: Math.floor(j.score), crownT: Math.floor(j.crownT || 0), streak: j.maxStreak || 0, cc: j.cc || 0, by: killer ? (killer.isPlayer && net.role === 'host' ? net.name : killer.name) : 'unknown', x: j.x, y: j.y
     });
     if (j.isPlayer){
       showDeath(deathStats());
@@ -1008,6 +1100,9 @@ body{
       showLen = bestLen; showKills = bestKills;
       $('d-bestlabel').textContent = 'BEST · LENGTH / KILLS';
     }
+    const fresh = recordRun(st, !!mod);
+    $('d-unlock').hidden = !fresh.length;
+    if (fresh.length) $('d-unlock').textContent = 'NEW IN HANGAR: ' + fresh.map(([kind, x]) => `${x.name} ${kind}`).join(', ');
     deathPos = { x:st.x, y:st.y }; state = 'dead';
     track('death');
     $('d-new').hidden = !newBest;
@@ -1203,7 +1298,7 @@ body{
     // a close call pays out (+5 score, never length) only if you survived it
     if (pendingCC && time - pendingCC.at >= CC_CONFIRM){
       if (player.alive){
-        player.score += 5;
+        player.score += 5; player.cc = (player.cc || 0) + 1;
         floaters.push({ x:player.x, y:player.y, t:0, text:'CLOSE CALL +5', c:COL.fuel });
         sfx('close'); dlog('CLOSE CALL', { past:pendingCC.past, gap:pendingCC.gap+'px', how:pendingCC.how });
       }
@@ -1290,7 +1385,9 @@ body{
     const p = j.pts, n = p.length; if (n<2) return;
     const crowned = j === bounty;                                   // crown: gold trail (visual only)
     const dayWide = mod === 'wide', wm = dayWide ? 2 : 1;
-    const core = crowned ? GOLD : (j.isPlayer ? COL.you : j.color), glow = crowned ? GOLD : (j.isPlayer ? COL.youGlow : j.color);
+    const tcol = j.look ? trailCols(j.look) : null, fx = j.look && !crowned ? j.look.fx : 'std';
+    const core = crowned ? GOLD : (tcol ? tcol.core : j.isPlayer ? COL.you : j.color), glow = crowned ? GOLD : (tcol ? tcol.glow : j.isPlayer ? COL.youGlow : j.color);
+    const pulseK = fx === 'pulse' ? .55 + .65*(.5 + .5*Math.sin(time*5)) : 1;
     const sb = j.isPlayer && time - (j.lastKillAt ?? -99) <= STREAK_GAP ? Math.min(j.streak||0, 5) : 0;          // kill streak: brighter glow per kill, up to 5
     // fading section: oldest points in their last FADE seconds; harmless, drawn thin and dissolving
     let fadeIdx = 0; while (fadeIdx < n-1 && time - p[fadeIdx].t >= j.life - FADE) fadeIdx++;
@@ -1334,9 +1431,21 @@ body{
       trailPath(p, a, b, null);
       ctx.strokeStyle = glow;
       if (sb){ ctx.globalAlpha = .05*sb; ctx.lineWidth = wm*Math.max(30, 6/cam.z); ctx.stroke(); }
-      ctx.globalAlpha = (dayWide ? .16 : .08)*(1 + sb*.5); ctx.lineWidth = wm*Math.max(15, 3.2/cam.z); ctx.stroke();
-      ctx.globalAlpha = Math.min(1, (dayWide ? .3 : .16)*(1 + sb*.5)); ctx.lineWidth = wm*Math.max(9, 2.4/cam.z); ctx.stroke();
-      ctx.strokeStyle = core; ctx.globalAlpha = 1; ctx.lineWidth = wm*Math.min(12, Math.max(5, 2/cam.z)); ctx.stroke();
+      ctx.globalAlpha = Math.min(1, (dayWide ? .16 : .08)*(1 + sb*.5)*pulseK); ctx.lineWidth = wm*Math.max(15, 3.2/cam.z); ctx.stroke();
+      ctx.globalAlpha = Math.min(1, (dayWide ? .3 : .16)*(1 + sb*.5)*pulseK); ctx.lineWidth = wm*Math.max(9, 2.4/cam.z); ctx.stroke();
+      if (fx === 'comet'){
+        // Comet: a big soft glow that swells toward the nose
+        const c0 = Math.max(a, b - 60);
+        for (let q = 0; q < 3; q++){ const qa = c0 + Math.floor((b - c0)*q/3); if (b - qa < 2) continue;
+          trailPath(p, qa, b, null); ctx.globalAlpha = .07; ctx.lineWidth = wm*Math.max(22 + q*10, (4.5 + q*2)/cam.z); ctx.stroke(); }
+        trailPath(p, a, b, null);
+      }
+      ctx.lineWidth = wm*Math.min(12, Math.max(5, 2/cam.z)); ctx.globalAlpha = 1;
+      if (fx === 'rainbow'){
+        // Rainbow: the core cycles through hues along the trail
+        const step = 6;
+        for (let q = a; q < b; q += step){ trailPath(p, q, Math.min(b, q + step), null); ctx.strokeStyle = `hsl(${(q*5 - time*140) % 360 + 360},95%,68%)`; ctx.stroke(); }
+      } else { ctx.strokeStyle = core; ctx.stroke(); }
       const h0 = Math.max(a, hs);
       if (b > h0){ trailPath(p, h0, b, null); ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = .95; ctx.lineWidth = wm*Math.min(8, Math.max(3, 1.2/cam.z)); ctx.stroke(); }
     }
@@ -1401,8 +1510,8 @@ body{
       }
       ctx.globalAlpha = a0;
     }
-    ctx.beginPath(); ctx.moveTo(12*s,0); ctx.lineTo(-8*s,-7*s); ctx.lineTo(-4*s,0); ctx.lineTo(-8*s,7*s); ctx.closePath();
-    ctx.fillStyle = j.isPlayer ? '#ffffff' : j.color; ctx.fill();
+    jetPath(ctx, j.look ? j.look.sh : 'dart', s);
+    ctx.fillStyle = j.look ? (byId(LOOK_COLORS, j.look.c).body || j.color) : j.isPlayer ? '#ffffff' : j.color; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = COL.void; ctx.stroke();
     if (j.slip > .05){
       ctx.globalAlpha = j.slip*(.45 + .45*Math.sin(time*38)); ctx.strokeStyle = COL.fuel; ctx.lineWidth = 2.2; ctx.stroke();
@@ -1791,8 +1900,10 @@ body{
         // the host's phone runs the world now; clear ours
         jets.length = 0; orbs.length = 0; parts.length = 0; mirrors.clear(); net.snaps.length = 0;
         buff = null; drop = null; bounty = null; revenge = null; player.alive = false; player.pts = [];
+        netSend({ t:'look', look: packLook(myLook) });       // so the host draws us the way we picked
         if (m.started) guestBegin(); else showLobby();
         break;
+      case 'look': if (net.role === 'host'){ net.looks[m.from] = unpackLook(m.look); const r = remoteByNet(m.from); if (r && net.looks[m.from]){ r.look = net.looks[m.from]; r.color = lookHex(r.look); } } break;
       case 'roster': net.roster = m.players; renderRoster(); break;
       case 'error':
         setRoomBusy(false); roomError(m.message);
@@ -1826,7 +1937,8 @@ body{
     if (bi < 0) for (let i = jets.length-1; i >= 0; i--) if (!isHuman(jets[i])){ bi = i; break; }
     const used = new Set(jets.filter(isHuman).map(j => j.color));
     const color = HUMAN_COLORS.find(c => !used.has(c)) || HUMAN_COLORS[0];
-    const j = makeJet({ remote:true, netId:id, name, color, persona:'human', input: NO_INTENT, rs:0 });
+    const lk = net.looks[id] || null;
+    const j = makeJet({ remote:true, netId:id, name, color: lk ? lookHex(lk) : color, look: lk, persona:'human', input: NO_INTENT, rs:0 });
     if (bi >= 0){ const b = jets[bi]; if (b === bounty) bounty = null; if (b === revenge) revenge = null; jets.splice(bi, 1, j); }
     else jets.push(j);
     if (net.started) spawn(j);
@@ -1855,7 +1967,7 @@ body{
       j.buff ? j.buff.type : 0, j.buff ? r1(Math.max(0, j.buff.until - time)) : 0, j.buff ? j.buff.dur : 0,
       j.protect > 0 ? r1(j.protect) : 0, r2(j.slip || 0), Math.floor(j.fuel), j.kills, Math.floor(j.score || 0), r2(j.life),
       j.flares || 0, r1(j.rollCD || 0), Math.floor(j.crownT || 0), j.streak || 0, (time - (j.lastKillAt ?? -99)) <= STREAK_GAP ? 1 : 0,
-      (j.ai && (j.ai.phase === 'warn' || j.ai.trap)) ? 1 : 0 ];
+      (j.ai && (j.ai.phase === 'warn' || j.ai.trap)) ? 1 : 0, packLook(j.look) ];
   }
   function hostTick(dt){
     if (net.roster.length < 2){ orbAdds.length = 0; orbDels.length = 0; return; }   // nobody to tell yet
@@ -1900,7 +2012,7 @@ body{
       }
       if (!j.alive && alive){ j.pts = []; j.x = a[2]; j.y = a[3]; j.a = a[4]; j.born = time; }   // fresh spawn: no trail from the old spot
       j.alive = alive;
-      j.isPlayer = mine; j.name = mine ? player.name : a[5]; j.color = mine ? COL.you : a[6];
+      j.isPlayer = mine; j.name = mine ? player.name : a[5]; j.look = mine ? myLook : unpackLook(a[26]); j.color = mine ? lookHex(myLook) : a[6];
       j.boost = !!a[8]; j.rollT = a[9]; j.rollDir = a[10];
       j.buff = a[11] ? { type:a[11], until: time + a[12], dur: a[13] } : null;
       j.protect = a[14]; j.slip = a[15]; j.fuel = a[16]; j.kills = a[17]; j.score = a[18]; j.life = a[19];
@@ -2016,6 +2128,72 @@ body{
     $('room-back').onclick = () => location.reload();
   }
   $('friends').addEventListener('click', () => { ensureAudio(); showRooms(); });
+
+  // ---------- hangar screen ----------
+  let hgFrom = 'menu', hgRaf = 0;
+  const lockText = x => { const v = progVal(x.need.k), n = x.need.n;
+    const unit = { best:'best', streak:'best streak', crown:'best', kills:'so far', days:'so far', secs:'best', rounds:'so far', cc:'so far' }[x.need.k];
+    const show = x.need.k === 'crown' || x.need.k === 'secs' ? `${Math.min(v, n)}s` : Math.min(v, n);
+    return `<b>${x.name}</b> is locked. ${x.need.d}. (${unit}: ${show})`; };
+  function hgChips(boxId, list, key, swatch, withMatch){
+    const box = $(boxId); box.replaceChildren();
+    const items = withMatch ? [{ id:'match', name:'Match jet' }, ...list] : list;
+    for (const x of items){
+      const b = document.createElement('button'); b.type = 'button';
+      const locked = !isUnlocked(x);
+      b.className = 'chip' + (swatch ? ' sw' : '') + (x.id === 'match' ? ' match' : '') + (locked ? ' locked' : '');
+      b.setAttribute('aria-pressed', myLook[key] === x.id ? 'true' : 'false');
+      b.setAttribute('aria-label', x.name + (locked ? ' (locked)' : ''));
+      if (swatch){ const i = document.createElement('i'); i.style.setProperty('--c', x.id === 'match' ? lookHex(myLook) : x.hex); b.append(i); }
+      else b.textContent = x.name;
+      b.addEventListener('click', () => {
+        if (locked){ $('hg-hint').innerHTML = lockText(x); return; }
+        myLook[key] = x.id; ls.set('contrail-look', JSON.stringify(myLook));
+        player.look = myLook; player.color = lookHex(myLook);
+        if (net.role === 'guest') netSend({ t:'look', look: packLook(myLook) });
+        $('hg-hint').textContent = x.id === 'match' ? 'Your trail matches your jet.' : `${x.name} selected.`;
+        hgRender();
+      });
+      box.append(b);
+    }
+  }
+  function hgRender(){
+    hgChips('hg-sh', LOOK_SHAPES, 'sh', false);
+    hgChips('hg-c', LOOK_COLORS, 'c', true);
+    hgChips('hg-tc', LOOK_COLORS, 'tc', true, true);
+    hgChips('hg-fx', LOOK_FX, 'fx', false);
+  }
+  function hgPreview(){
+    const cv = $('hgPrev'), c = cv.getContext('2d'), dpr = Math.min(2, devicePixelRatio || 1);
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w*dpr)){ cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr); }
+    c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,w,h);
+    const t = performance.now()/1000, L = myLook, tc = trailCols(L);
+    const pts = []; for (let i = 0; i <= 60; i++){ const x = 14 + (w*.72 - 14)*i/60; pts.push([x, h/2 + Math.sin(i*.16 - t*2.2)*h*.18]); }
+    const path = (a, b) => { c.beginPath(); c.moveTo(pts[a][0], pts[a][1]); for (let i = a+1; i <= b; i++) c.lineTo(pts[i][0], pts[i][1]); };
+    const pk = L.fx === 'pulse' ? .55 + .65*(.5 + .5*Math.sin(t*5)) : 1;
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    path(0, 60); c.strokeStyle = tc.glow; c.globalAlpha = Math.min(1, .1*pk); c.lineWidth = 16; c.stroke(); c.globalAlpha = Math.min(1, .2*pk); c.lineWidth = 9; c.stroke();
+    if (L.fx === 'comet') for (let q = 0; q < 3; q++){ path(20 + q*13, 60); c.globalAlpha = .08; c.lineWidth = 22 + q*9; c.stroke(); }
+    c.globalAlpha = 1; c.lineWidth = 4.5;
+    if (L.fx === 'rainbow') for (let q = 0; q < 60; q += 3){ path(q, Math.min(60, q+3)); c.strokeStyle = `hsl(${(q*10 - t*140) % 360 + 360},95%,68%)`; c.stroke(); }
+    else { path(0, 60); c.strokeStyle = tc.core; c.stroke(); }
+    const [hx, hy] = pts[60], [px, py] = pts[59];
+    c.save(); c.translate(hx + 10, hy); c.rotate(Math.atan2(hy - py, hx - px)); jetPath(c, L.sh, 1.9);
+    c.fillStyle = byId(LOOK_COLORS, L.c).body || lookHex(L); c.fill(); c.lineWidth = 1.5; c.strokeStyle = COL.void; c.stroke(); c.restore();
+    hgRaf = requestAnimationFrame(hgPreview);
+  }
+  function showHangar(from){
+    hgFrom = from;
+    for (const id of ['menu','death','rooms']) $(id).hidden = true;
+    $('hangar').hidden = false; $('overlay').hidden = false;
+    const n = ALL_LOOKS().filter(([, x]) => isUnlocked(x)).length, tot = ALL_LOOKS().length;
+    $('hg-hint').textContent = n === tot ? `All ${tot} unlocked. Nice flying.` : `${n} of ${tot} unlocked. Tap a locked one to see how to earn it.`;
+    hgRender(); cancelAnimationFrame(hgRaf); hgRaf = requestAnimationFrame(hgPreview);
+  }
+  $('hangarBtn').addEventListener('click', () => showHangar('menu'));
+  $('d-unlock').addEventListener('click', () => showHangar('death'));
+  $('hg-done').addEventListener('click', () => { cancelAnimationFrame(hgRaf); $('hangar').hidden = true; $(hgFrom).hidden = false; });
   $('create').addEventListener('click', () => {
     setCallsign($('pname').value);
     connect(() => netSend({ t:'create', name: net.name }));
