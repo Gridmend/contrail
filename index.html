@@ -1,0 +1,1668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="description" content="A one-thumb jet game: grow your contrail, cut off 12 bots, barrel roll through trails and steal the bounty.">
+<meta name="theme-color" content="#050b1d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Contrail.io">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Contrail.io</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chakra+Petch:wght@500;600;700&display=swap">
+<style>
+/* Layout: full-bleed night-sky arena on a canvas; HUD pinned to the four corners inside the safe areas; menus are one narrow card centered over the sky. Single deliberate dark look. */
+:root{
+  color-scheme: dark;
+  --sky:#0b1633;
+  --void:#050b1d;
+  --ink:#e9f0ff;
+  --muted:#93a4cc;
+  --fuel:#8ef0ff;
+  --drop:#ffc857;
+  --alert:#ff6b7f;
+  --panel:rgba(7,14,36,.78);
+  --line:rgba(142,240,255,.18);
+  --display:"Chakra Petch", "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  --body:"Barlow", "Segoe UI", system-ui, sans-serif;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{
+  margin:0; background:var(--void); color:var(--ink); font-family:var(--body);
+  overflow:hidden; touch-action:none; user-select:none; -webkit-user-select:none;
+  -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent;
+}
+#game{position:fixed; inset:0; width:100%; height:100%; display:block}
+
+.hud{position:fixed; pointer-events:none; font-family:var(--display); z-index:2}
+#stats{
+  top:calc(10px + env(safe-area-inset-top,0px));
+  left:calc(12px + env(safe-area-inset-left,0px));
+  display:grid; gap:2px;
+}
+.stat-label{font-size:10px; letter-spacing:.16em; color:var(--muted); font-weight:600}
+#score{font-size:30px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums}
+.scorerow{display:flex; align-items:baseline; gap:8px}
+#lenDelta{font-size:16px; font-weight:700; color:#ff9a4d; font-variant-numeric:tabular-nums; opacity:0; transition:opacity .4s}
+#lenDelta.on{opacity:1}
+#score small{font-size:16px; color:var(--muted); font-weight:600; margin-left:2px}
+#substats{font-size:12px; letter-spacing:.06em; color:var(--muted); font-variant-numeric:tabular-nums}
+#substats b{color:var(--ink); font-weight:600}
+#scoreline{font-size:12px; letter-spacing:.06em; color:var(--muted); font-variant-numeric:tabular-nums}
+#scoreline b{color:var(--ink); font-weight:600}
+#x2{margin-left:4px; font-size:10px; font-weight:700; letter-spacing:.12em; color:#1a1200; background:#ffd84a; border-radius:3px; padding:1px 5px}
+.crownline{margin:0; font-family:var(--display); font-size:15px; font-weight:700; letter-spacing:.06em; color:#ffd84a}
+#bountyTag{
+  justify-self:start; margin-top:4px; font-size:11px; font-weight:700; letter-spacing:.14em; color:#1a1200;
+  background:#ffd84a; border-radius:4px; padding:3px 7px; animation:bounty 1.2s ease-in-out infinite;
+}
+@keyframes bounty{ 50%{ box-shadow:0 0 0 4px rgba(255,216,74,.25) } }
+@media (prefers-reduced-motion: reduce){ #bountyTag{animation:none} }
+#board .row.crown span:first-child{color:#ffd84a; font-weight:700}
+.toast.bounty{color:#ffd84a; border-color:rgba(255,216,74,.5)}
+.toast.bounty-claim{color:#1a1200; background:#ffd84a; border-color:#ffd84a; font-family:var(--display); font-size:15px; font-weight:700; letter-spacing:.1em}
+
+#rightcol{
+  top:calc(50px + env(safe-area-inset-top,0px));
+  right:calc(12px + env(safe-area-inset-right,0px));
+  display:flex; flex-direction:column; align-items:flex-end; gap:6px;
+}
+#mute{
+  position:fixed; z-index:6; pointer-events:auto;
+  top:calc(10px + env(safe-area-inset-top,0px));
+  right:calc(12px + env(safe-area-inset-right,0px));
+  font-family:var(--display); font-weight:600; font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+  background:var(--panel); color:var(--fuel); border:1px solid var(--line); border-radius:6px; padding:7px 10px;
+  cursor:pointer; touch-action:manipulation; display:flex; align-items:center; gap:6px;
+}
+#mute svg{width:14px; height:14px}
+#mute[aria-pressed="true"]{color:var(--muted)}
+#mute:focus-visible{outline:2px solid var(--drop); outline-offset:2px}
+#toasts{display:flex; flex-direction:column; align-items:flex-start; gap:5px; max-width:min(190px, 45vw); margin-top:6px}
+.toast{
+  font-family:var(--body); font-size:12px; font-weight:600; color:var(--ink); text-align:left;
+  background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:5px 9px;
+  opacity:0; transform:translateX(-14px); transition:opacity .3s, transform .3s;
+}
+.toast.on{opacity:1; transform:none}
+.toast.kill{color:var(--fuel); border-color:rgba(142,240,255,.45)}
+.toast.drop{color:var(--drop); border-color:rgba(255,200,87,.45)}
+.toast[class*="buff-"]{font-family:var(--display); font-size:15px; font-weight:700; letter-spacing:.1em}
+.toast.revenge{color:#ff4d5e; border-color:rgba(255,77,94,.6); font-family:var(--display); font-size:15px; font-weight:700; letter-spacing:.1em}
+.toast.buff-afterburner{color:#ff8a3d; border-color:rgba(255,138,61,.6)}
+.toast.buff-wide{color:#3ddc84; border-color:rgba(61,220,132,.6)}
+.toast.buff-flares{color:#ffffff; border-color:rgba(255,255,255,.6)}
+#pad{
+  pointer-events:auto; bottom:calc(16px + env(safe-area-inset-bottom,0px)); left:50%; transform:translateX(-50%);
+  width:76px; height:76px; border-radius:50%; border:2px solid rgba(255,200,87,.55);
+  background:rgba(255,122,47,.16); color:var(--drop); font-family:var(--display); font-weight:700; font-size:12px; letter-spacing:.14em;
+  touch-action:none; cursor:pointer;
+}
+#pad.held{background:rgba(255,122,47,.45); color:#fff3c4; border-color:var(--drop)}
+#board{
+  background:var(--panel); border:1px solid var(--line); border-radius:6px;
+  padding:6px 8px; min-width:132px; font-size:11px;
+}
+#board .row{display:grid; grid-template-columns:16px 1fr auto; gap:6px; font-variant-numeric:tabular-nums; color:var(--muted); line-height:1.6}
+#board .row.you{color:var(--fuel); font-weight:700}
+#board .row span:last-child{text-align:right}
+
+#minimap{
+  bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  right:calc(12px + env(safe-area-inset-right,0px));
+  width:108px; height:108px; border-radius:6px; border:1px solid var(--line);
+  background:var(--panel);
+}
+#hint{
+  bottom:calc(104px + env(safe-area-inset-bottom,0px));
+  left:calc(12px + env(safe-area-inset-left,0px));
+  right:calc(132px + env(safe-area-inset-right,0px));
+  font-family:var(--body); font-size:13px; color:var(--muted); line-height:1.4;
+  transition:opacity .6s;
+}
+#hint b{color:var(--ink); font-weight:600}
+#banner{
+  top:30%; left:0; right:0; text-align:center; padding-inline:16px; z-index:3;
+  font-family:var(--display); font-weight:700; font-size:34px; letter-spacing:.1em; line-height:1;
+  color:var(--fuel); text-shadow:0 0 18px rgba(142,240,255,.55), 0 2px 0 rgba(5,11,29,.9);
+}
+#banner.streak-3{font-size:40px; color:#ffffff}
+#banner.streak-5{font-size:44px; color:#ffd84a; text-shadow:0 0 26px rgba(255,216,74,.7), 0 2px 0 rgba(5,11,29,.9)}
+#banner.revenge{font-size:44px; color:#ff4d5e; text-shadow:0 0 22px rgba(255,77,94,.6), 0 2px 0 rgba(5,11,29,.9)}
+#banner.show{animation:bannerpop 1.4s ease-out forwards}
+@keyframes bannerpop{ 0%{opacity:0; transform:scale(.6)} 12%{opacity:1; transform:scale(1.12)} 24%{transform:scale(1)} 75%{opacity:1} 100%{opacity:0; transform:translateY(-14px)} }
+@media (prefers-reduced-motion: reduce){ #banner.show{animation:bannerfade 1.4s linear forwards} @keyframes bannerfade{ 0%,75%{opacity:1} 100%{opacity:0} } }
+.revenge-line{margin:0; font-size:13px; color:#ff8a96; line-height:1.4}
+#rolltip{
+  left:50%; bottom:calc(30% + env(safe-area-inset-bottom,0px)); transform:translateX(-50%);
+  display:grid; justify-items:center; gap:6px; color:var(--ink);
+  font-size:15px; font-weight:700; letter-spacing:.14em; white-space:nowrap;
+  background:rgba(5,11,29,.7); border:1px solid var(--line); border-radius:8px; padding:10px 14px;
+  opacity:0; transition:opacity .3s;
+}
+#rolltip.on{opacity:1}
+#rolltip svg{width:22px; height:36px; color:var(--fuel); animation:swipe 1s ease-in-out infinite}
+@keyframes swipe{ 0%{transform:translateY(10px); opacity:.2} 60%{transform:translateY(-8px); opacity:1} 100%{transform:translateY(-12px); opacity:0} }
+@media (prefers-reduced-motion: reduce){ #rolltip svg{animation:none} }
+#debug{
+  left:calc(12px + env(safe-area-inset-left,0px)); bottom:calc(170px + env(safe-area-inset-bottom,0px));
+  max-width:calc(100% - 24px); margin:0; padding:6px 8px; z-index:4;
+  background:rgba(0,0,0,.6); color:#b6ffcf; border-radius:4px;
+  font:11px/1.35 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; white-space:pre-wrap;
+}
+
+#overlay{
+  position:fixed; inset:0; z-index:5; display:grid; place-items:safe center; overflow-y:auto;
+  background:radial-gradient(ellipse at center, rgba(5,11,29,.35), rgba(5,11,29,.82));
+  padding-block:16px;
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+}
+.card{
+  width:100%; max-width:340px; background:var(--panel); border:1px solid var(--line);
+  border-radius:10px; padding:22px 20px 20px; display:grid; gap:16px;
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+}
+.logo{font-family:var(--display); font-size:38px; font-weight:700; line-height:1; letter-spacing:.02em; margin:0}
+.logo span{color:var(--fuel)}
+.tag{margin:0; color:var(--muted); font-size:15px; line-height:1.45}
+.howto{list-style:none; margin:0; padding:0; display:grid; gap:9px}
+.howto li{display:grid; grid-template-columns:54px 1fr; gap:10px; font-size:14px; line-height:1.35; align-items:baseline}
+.howto .k{font-family:var(--display); font-size:10px; letter-spacing:.14em; color:var(--fuel); font-weight:600}
+.btn{
+  font-family:var(--display); font-weight:700; font-size:18px; letter-spacing:.12em; text-transform:uppercase;
+  background:var(--drop); color:#1a1200; border:0; border-radius:8px; padding:14px 18px; cursor:pointer;
+  touch-action:manipulation;
+}
+.btn:disabled{opacity:.45; cursor:default}
+.btn:focus-visible{outline:3px solid var(--fuel); outline-offset:3px}
+.fine{margin:0; font-size:12px; color:var(--muted); text-align:center}
+.by{margin:4px 0 0; color:var(--muted); font-size:15px}
+.by b{color:var(--ink)}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:8px}
+.hero{display:grid; gap:4px}
+.hero-v{font-family:var(--display); font-size:48px; font-weight:700; line-height:1; color:var(--drop); display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 8px; font-variant-numeric:tabular-nums}
+.hero-v .unit{font-size:22px}
+.hero-v .slash{color:var(--muted); font-weight:500}
+.hero-v .k{font-size:34px}
+.hero-v .klabel{font-size:12px; letter-spacing:.12em; color:var(--muted)}
+.newbest{align-self:center; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#1a1200; background:var(--drop); border-radius:4px; padding:4px 6px}
+.splash-s{font-family:var(--display); font-weight:700; letter-spacing:.08em; color:var(--alert)}
+.rankrow{display:flex; justify-content:space-between; align-items:baseline; border-top:1px solid var(--line); padding-top:10px; font-family:var(--display); font-size:18px; font-weight:700; font-variant-numeric:tabular-nums}
+.cell{border:1px solid var(--line); border-radius:6px; padding:8px 10px}
+.cell .v{font-family:var(--display); font-size:20px; font-weight:700; font-variant-numeric:tabular-nums}
+.seg{display:grid; grid-template-columns:auto 1fr 1fr; gap:6px; align-items:center}
+.seg .stat-label{padding-right:4px}
+.seg button{font-family:var(--display); font-size:13px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+  background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:9px 6px; cursor:pointer; touch-action:manipulation}
+.seg button[aria-pressed="true"]{background:var(--fuel); color:#04121c; border-color:var(--fuel)}
+.more{border-top:1px solid var(--line); padding-top:10px}
+.more summary{cursor:pointer; font-family:var(--display); font-size:11px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--fuel); list-style-position:inside}
+.more summary:focus-visible{outline:2px solid var(--drop); outline-offset:2px}
+.more .howto{margin-top:10px}
+.btn-ghost{font-family:var(--display); font-weight:600; font-size:14px; letter-spacing:.12em; text-transform:uppercase;
+  background:transparent; color:var(--fuel); border:1px solid var(--line); border-radius:8px; padding:11px 16px; cursor:pointer; touch-action:manipulation}
+.btn-ghost:focus-visible{outline:2px solid var(--drop); outline-offset:2px}
+.today{display:grid; gap:2px; border:1px solid rgba(255,216,74,.35); border-radius:8px; padding:9px 11px; background:rgba(255,216,74,.06)}
+.today .stat-label{color:#ffd84a}
+.today-name{font-family:var(--display); font-size:17px; letter-spacing:.06em; color:var(--ink)}
+.today-desc{font-size:13px; color:var(--muted); line-height:1.35}
+#modeTag{justify-self:start; margin-top:4px; font-size:10px; font-weight:700; letter-spacing:.14em; color:#ffd84a; border:1px solid rgba(255,216,74,.45); border-radius:4px; padding:2px 6px}
+.seg button:focus-visible{outline:2px solid var(--drop); outline-offset:2px}
+@media (prefers-reduced-motion: reduce){ .toast{transform:none} }
+</style>
+</head>
+<body>
+
+<canvas id="game" aria-label="Contrail.io game arena"></canvas>
+
+<div class="hud" id="stats" hidden>
+  <div class="stat-label">LENGTH</div>
+  <div class="scorerow"><span id="score">0</span><span id="lenDelta" aria-hidden="true"></span></div>
+  <div id="substats">RANK <b id="rank">-</b> · KILLS <b id="kills">0</b></div>
+  <div id="scoreline">SCORE <b id="pts">0</b> <span id="x2" hidden>x2 CROWN</span></div>
+  <div id="bountyTag" hidden>YOU HAVE THE BOUNTY</div>
+  <div id="modeTag" hidden></div>
+  <div id="toasts" aria-live="polite"></div>
+</div>
+<button id="mute" type="button" aria-pressed="false" aria-label="Mute sound">
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path id="mute-ico" fill="currentColor" d="M2 6h3l4-3v10L5 10H2z"/><path id="wave" d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.6a6 6 0 0 1 0 8.8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/><path id="cross" d="M11 6l4 4M15 6l-4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" hidden/></svg>
+  <span id="mute-label">Sound</span>
+</button>
+<div class="hud" id="rightcol"><div id="board" hidden></div></div>
+<canvas class="hud" id="minimap" width="216" height="216" hidden></canvas>
+<div class="hud" id="hint" hidden></div>
+<button class="hud" id="pad" type="button" hidden aria-label="Boost">BOOST</button>
+<pre class="hud" id="debug" hidden></pre>
+<div class="hud" id="banner" hidden aria-live="assertive"></div>
+<div class="hud" id="rolltip" hidden aria-live="polite">
+  <svg viewBox="0 0 24 40" aria-hidden="true"><path d="M12 38V6M3 15l9-10 9 10" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span>SWIPE UP TO ROLL</span>
+</div>
+
+<div id="overlay">
+  <section class="card" id="menu">
+    <div>
+      <h1 class="logo">Contrail<span>.io</span></h1>
+    </div>
+    <p class="tag">Your contrail lingers behind you, then fades. Any jet that crosses it before it fades goes down.</p>
+    <div class="today"><span class="stat-label">TODAY</span><b class="today-name"></b><span class="today-desc"></span></div>
+    <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
+    <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
+    <button class="btn" id="fly" type="button">Fly</button>
+    <ul class="howto">
+      <li><span class="k">STEER</span><span id="howto-steer">Put your thumb down anywhere and drag the way you want to fly. Let go to fly straight.</span></li>
+      <li><span class="k">BOOST</span><span id="howto-boost">Double-tap and hold, or add a second finger. Boosting burns fuel.</span></li>
+      <li><span class="k">ROLL</span><span>Swipe up and let go to barrel roll through one enemy trail. Then wait 4 seconds.</span></li>
+    </ul>
+    <details class="more">
+      <summary>More rules</summary>
+      <ul class="howto">
+        <li><span class="k">DRAFT</span><span>Fly alongside an enemy trail, within about a jet's length, for half a second to catch its slipstream: 25% more speed.</span></li>
+        <li><span class="k">BUFFS</span><span>One at a time on the map: <b style="color:#ff8a3d">Afterburner</b> (5s free boost), <b style="color:#3ddc84">Wide Trail</b> (8s: what you lay is 2x thick, 2x deadly, and can't be rolled through), <b style="color:#fff">Flares</b> (one spare roll, saved until you swipe during a cooldown).</span></li>
+        <li><span class="k">BOUNTY</span><span>The #1 jet wears a <b style="color:#ffd84a">gold crown</b> and a gold trail, and earns score twice as fast. Splash it for double the fuel. Hold it and red arrows warn you of jets coming at you.</span></li>
+        <li><span class="k">SKIM</span><span>Graze within a hair of an enemy trail for a CLOSE CALL: +5 score and a split second of slow motion.</span></li>
+        <li><span class="k">STREAK</span><span>2 kills in one life is a Double Splash, 3 a Triple, 5 clears the airspace. Your trail glows brighter with each.</span></li>
+        <li><span class="k">REVENGE</span><span>Whoever splashed you wears a red skull. Get them back for double length.</span></li>
+        <li><span class="k">LENGTH</span><span>Every fuel orb is a point of length. More length means your trail lingers longer: 6 seconds, plus 1 per 100, up to 15. Boosting burns it.</span></li>
+      </ul>
+    </details>
+    <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
+    <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
+    <p class="fine">v0.4 · single player against 12 bots</p>
+  </section>
+
+  <section class="card" id="death" hidden>
+    <div class="hero">
+      <div class="stat-label" id="d-bestlabel">BEST · LENGTH / KILLS</div>
+      <div class="hero-v"><span id="d-best">0</span><span class="slash">/</span><span class="k" id="d-bestk">0</span><span class="klabel">KILLS</span><span class="newbest" id="d-new" hidden>New best</span></div>
+    </div>
+    <p class="by"><span class="splash-s">SPLASHED</span> by <b id="d-by">-</b></p>
+    <div class="grid3">
+      <div class="cell"><div class="stat-label">LENGTH</div><div class="v" id="d-trail">0</div></div>
+      <div class="cell"><div class="stat-label">KILLS</div><div class="v" id="d-kills">0</div></div>
+      <div class="cell"><div class="stat-label">TIME</div><div class="v" id="d-time">0s</div></div>
+    </div>
+    <div class="rankrow"><span class="stat-label">RANK</span><span id="d-rank">-</span></div>
+    <div class="rankrow"><span class="stat-label">SCORE</span><span id="d-score">0</span></div>
+    <p class="crownline" id="d-crowned" hidden></p>
+    <p class="revenge-line" id="d-revenge" hidden></p>
+    <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
+    <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
+    <button class="btn" id="again" type="button" disabled>Fly again</button>
+  </section>
+</div>
+
+<script>
+(() => {
+  const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+  const mm = document.getElementById('minimap'), mctx = mm.getContext('2d');
+  const $ = id => document.getElementById(id);
+
+  // ---- tuning ----
+  const W = 4500, H = 4500,   /* 1.5x wider and taller (was 3000) */ SEG = 7, SPEED = 170, BOOST = 306, TURN = 8.3;
+  const SAFE = 2, HIT = 6.5, PROTECT = 3, BOT_RESPAWN = 2.5;
+  const ORBS = 560,   /* ~250 x 2.25 so fuel stays as dense on the bigger map */ DROP_EVERY = 30, DROP_LIFE = 8;
+  // fading contrails: each trail point lives LIFE seconds, fades (and is harmless) for the last FADE
+  const LIFE_BASE = 6, LIFE_PER = 100, LIFE_MAX = 15, FADE = 1;
+  const BOT_LIFE = 12;
+  const TRAIL_CAP = 300;                                // drawn trail tops out at 300 points (~2,100px); length keeps counting
+  const CC_CONFIRM = .25;
+  const CLOSE_PX = 12, SLOWMO_T = .15, SLOWMO_RATE = .3;   // close call: within 12px, 0.15s of slow motion                                  // bot trails always fade after 12s; your trail still grows with length
+  const MIN_BOOST = 15, BURN = 15, START_LEN = 30;                     // boost burns fuel, ramping 1x -> 3x
+  const ROLL_T = .6, ROLL_CD = 4;                       // barrel roll
+  const PASS_CLEAR = 40, PASS_MAX = 1;
+  // DAILY MODE: one modifier per calendar day, index = (days since 2026-01-01) % 4, using the player's local date
+  const DAILY_MODS = [
+    { key:'slip', name:'Double Slipstream', desc:'Slipstream gives +50% speed instead of +25%.' },
+    { key:'wide', name:'Wide Trails Only', desc:'Every trail is 2x thick with a 2x deadly edge.' },
+    { key:'roll', name:'Fast Rolls',        desc:'Roll cooldown is halved: 2 seconds.' },
+    { key:'fuel', name:'Fuel Rush',         desc:'Fuel orbs on the map are worth 3x.' }
+  ];
+  const _now = new Date();
+  const DAY_INDEX = Math.floor((Date.UTC(_now.getFullYear(), _now.getMonth(), _now.getDate()) - Date.UTC(2026, 0, 1)) / 864e5);
+  const TODAY = DAILY_MODS[((DAY_INDEX % 4) + 4) % 4];
+  const TODAY_KEY = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,'0')}-${String(_now.getDate()).padStart(2,'0')}`;
+  let mod = null;                                       // modifier in effect for the current flight (null in Classic)
+  const slipGain = () => mod === 'slip' ? .5 : SLIP_GAIN;
+  const rollCdMax = () => mod === 'roll' ? ROLL_CD/2 : ROLL_CD;                  // a rolled-through trail stays harmless until your nose is 40px clear of it, or 1s passes
+  const SWIPE_MS = 300, SWIPE_PX = 60, SWIPE_DEAD = 80;   // swipes starting in the bottom 80px never roll                  // roll gesture: swipe up 60px+ and lift within 300ms
+  // slipstream: fly parallel within 40px of a live enemy trail for 0.5s -> +25% speed
+  const SLIP_RANGE = 40, SLIP_ALIGN = .82;            // entry: within 40px, heading within ~35 deg of the trail (either way along it)
+  const SLIP_HOLD_RANGE = 52, SLIP_HOLD_ALIGN = .7;   // once on, a little slack so normal wobble does not drop it
+  const SLIP_ARM = .5, SLIP_LOSE = .25, SLIP_GAIN = .25, SLIP_IN = .3, SLIP_OUT = .5;
+  // buffs: one on the map at a time; the next appears 20s after the last is picked up
+  const BUFF_FIRST = 12, BUFF_RESPAWN = 20, BUFF_R = 30;
+  const BUFFS = {
+    afterburner: { name:'Afterburner', color:'#ff8a3d', dur:5, letter:'A' },     // 5s of boost that burns no fuel
+    wide:        { name:'Wide Trail',  color:'#3ddc84', dur:8, letter:'W' },     // trail laid while active: 2x thick, 2x hitbox, can't be rolled through
+    flares:      { name:'Flares',      color:'#ffffff', dur:0, letter:'F' }      // one stored extra roll, kept until used
+  };
+  const BUFF_TYPES = Object.keys(BUFFS);
+
+  const COL = { you:'#f4f8ff', youGlow:'#8ef0ff', fuel:'#8ef0ff', drop:'#ffc857', edge:'#ff9f5a',
+    grid:'rgba(140,170,255,0.07)', sky:'#0b1633', void:'#050b1d' };
+  const BOT_COUNT = 12;   // 3 hunters, 3 cutters, 3 cowards, 3 builders
+  // distinct bright hues for each bot, avoiding the buff colors and gold
+  const BOT_COLORS = ['#ff6b8a','#ffb454','#7dff9b','#c58bff','#5fd4ff','#ff7d4f','#f5e663','#4fffd2','#ff8de0','#9fb6ff',
+                      '#ff9fb3','#d4a2ff','#7fd1ff','#b8f36a','#ffa07a','#6fe3c0','#f7b0ff','#a8c8ff','#ffcf7a','#8ff0a4','#e48cff','#72b4ff'];
+  const NAMES = ['VIPER','GHOST','NOMAD','BANDIT','RAZOR','COBRA','DUSTER','HAWK','SABRE','TALON','FLINT','RAVEN','ROOK','WIDOW','BLAZE'];
+  // roughly 40% cutters, 30% cowards, 30% builders, whatever the bot count
+  // 3 hunters, then cutters / cowards / builders for the rest (13 bots -> 3 hunters, 4 cutters, 3 cowards, 3 builders)
+  const HUNTERS = 3;
+  const PERSONAS = Array.from({ length: BOT_COUNT }, (_, i) => i < HUNTERS ? 'hunter'
+    : ['cutter','coward','builder','cutter','coward','builder','cutter','coward','builder','cutter'][(i - HUNTERS) % 10]);
+  // every bot checks for trails in front of it on every think (they still die when boxed in or cut off)
+  const SKILL = { cutter:1, coward:1, builder:1, hunter:1 };
+  const NOISE = { cutter:.25, coward:.12, builder:.15, hunter:.18 };   // steering wobble
+  const TRAP_RANGE = 300, STALK_RANGE = 600;           // hunters: trap the player inside 300px, shadow them inside 600px
+
+  let cw = 0, ch = 0, dpr = 1;
+  function resize(){ dpr = Math.min(window.devicePixelRatio || 1, 2); cw = innerWidth; ch = innerHeight; cv.width = cw*dpr; cv.height = ch*dpr; }
+  addEventListener('resize', resize); resize();
+
+  const rand = (a,b) => a + Math.random()*(b-a);
+  const clamp = (v,a,b) => v<a?a:v>b?b:v;
+  function angDiff(a,b){ let d=b-a; while(d>Math.PI) d-=2*Math.PI; while(d<-Math.PI) d+=2*Math.PI; return d; }
+  const angLerp = (a,b,t) => a + angDiff(a,b)*t;
+  const lifeOf = fuel => Math.min(LIFE_MAX, LIFE_BASE + fuel/LIFE_PER);
+  const ls = { get(k){ try { return localStorage.getItem(k); } catch(e) { return null; } }, set(k,v){ try { localStorage.setItem(k, String(v)); } catch(e) {} } };
+
+  // debug log: always to the console; also on screen when the link ends in #debug
+  let DEBUG = location.hash === '#debug';
+  const dbgLines = [];
+  function dlog(msg, data){
+    const t = (typeof time === 'number' ? time : 0).toFixed(2);
+    try { console.log(`[contrail ${t}s] ${msg}`, data || ''); } catch(e) {}
+    if (!DEBUG) return;
+    dbgLines.push(`${t}s  ${msg}${data ? '  ' + Object.entries(data).map(([k,v]) => k+'='+v).join(' ') : ''}`);
+    while (dbgLines.length > 8) dbgLines.shift();
+    const el = $('debug'); el.hidden = false; el.textContent = dbgLines.join('\n');
+  }
+  addEventListener('hashchange', () => { DEBUG = location.hash === '#debug'; $('debug').hidden = !DEBUG; });
+  let jets = [], orbs = [], parts = [];
+  let boostTip = false, rollTip = false, shake = 0, rings = [];
+  let state = 'menu', time = 0, dropT = 12, drop = null, dropCount = 0;
+  let buff = null, buffT = BUFF_FIRST;
+  // bounty: whoever is #1 carries it; re-checked 4x a second so the crown moves within 1s
+  let pendingCC = null;
+  let lenDrop = 0, lastBurnAt = -9, sparkT = 0;
+  let lastCloseCall = -9, slowmo = 0, floaters = [], revenge = null, bannerQ = [], bannerBusy = false;
+  let bounty = null, bountyT = 0, gotBountyAt = -99, lostBountyAt = -99;
+  const GOLD = '#ffd84a', RED = '#ff4d5e';
+  const TOAST_MS = 2000, STREAK_GAP = 4;
+  const CROWN_SETTLE = 1.5;                             // seconds a crown change must hold before it toasts you
+  const THREAT_R = 400, THREAT_COS = .8;                // crown: warn about jets within 400px pointed within ~37deg of you
+  const cam = { x:W/2, y:H/2, z:1 };
+  let deathPos = null, flightStart = 0;
+  let bestLen = +ls.get('contrail-best-length') || 0, bestKills = +ls.get('contrail-best-kills') || 0;
+
+  // ================= AUDIO (all generated with Web Audio, no files) =================
+  const audio = { ctx:null, master:null, music:null, sfx:null, src:null, building:false, muted: ls.get('contrail-muted') === '1' };
+  function ensureAudio(){
+    try {
+      if (!audio.ctx){
+        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+        const a = new AC(); audio.ctx = a;
+        audio.master = a.createGain(); audio.master.gain.value = audio.muted ? 0 : 1; audio.master.connect(a.destination);
+        audio.music = a.createGain(); audio.music.gain.value = .55; audio.music.connect(audio.master);
+        audio.sfx = a.createGain(); audio.sfx.gain.value = .9; audio.sfx.connect(audio.master);
+        audio.noise = a.createBuffer(1, a.sampleRate, a.sampleRate);
+        const d = audio.noise.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+      }
+      if (audio.ctx.state === 'suspended') audio.ctx.resume();
+      startMusic();
+    } catch(e) {}
+  }
+  async function renderMusic(){
+    // 8 bars of synthwave in A minor (Am F C G), rendered once, then looped
+    const bpm = 112, beat = 60/bpm, bars = 8, len = bars*4*beat, sr = 44100;
+    const oc = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, Math.ceil(len*sr), sr);
+    const out = oc.createGain(); out.gain.value = .8; out.connect(oc.destination);
+    const echo = oc.createDelay(1); echo.delayTime.value = beat*.75; const fb = oc.createGain(); fb.gain.value = .28;
+    const wet = oc.createGain(); wet.gain.value = .35; echo.connect(fb).connect(echo); echo.connect(wet).connect(out);
+    const nz = oc.createBuffer(1, sr, sr); const nd = nz.getChannelData(0); for (let i=0;i<nd.length;i++) nd[i] = Math.random()*2-1;
+    const hz = m => 440*Math.pow(2,(m-69)/12);
+    function tone(type, f, t, dur, vol, cut, att=.01, send=false, detune=0){
+      const o = oc.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = detune;
+      const g = oc.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t+att); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+      let n = o; if (cut){ const lp = oc.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cut; o.connect(lp); n = lp; }
+      n.connect(g); g.connect(out); if (send) g.connect(echo);
+      o.start(t); o.stop(t+dur+.05);
+    }
+    function kick(t){ const o = oc.createOscillator(); o.frequency.setValueAtTime(130,t); o.frequency.exponentialRampToValueAtTime(42,t+.14);
+      const g = oc.createGain(); g.gain.setValueAtTime(.55,t); g.gain.exponentialRampToValueAtTime(.001,t+.3); o.connect(g).connect(out); o.start(t); o.stop(t+.32); }
+    function hat(t, v){ const s = oc.createBufferSource(); s.buffer = nz; const hp = oc.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000;
+      const g = oc.createGain(); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(.001,t+.05); s.connect(hp).connect(g).connect(out); s.start(t, rand(0,.5)); s.stop(t+.06); }
+    const chords = [[57,60,64],[53,57,60],[48,52,55],[55,59,62]];
+    for (let bar=0; bar<bars; bar++){
+      const c = chords[bar%4], t0 = bar*4*beat;
+      for (const m of c){ tone('sawtooth', hz(m), t0, 4*beat, .022, 1400, .35, false, -7); tone('sawtooth', hz(m), t0, 4*beat, .022, 1400, .35, false, 7); }
+      for (let i=0;i<8;i++) tone('square', hz(c[0]-24), t0 + i*beat/2, beat/2*.85, .07, 520);
+      if (bar >= 2) for (let i=0;i<16;i++){ const m = c[i%3] + 12 + ((i>>2)%2 ? 12 : 0); tone('triangle', hz(m), t0 + i*beat/4, beat/4*.9, .045, 0, .005, true); }
+      for (let b=0;b<4;b++){ kick(t0 + b*beat); hat(t0 + b*beat + beat/2, .12); if (bar>=4) hat(t0 + b*beat + beat*.75, .06); }
+    }
+    return oc.startRendering();
+  }
+  async function startMusic(){
+    if (audio.src || audio.building || !audio.ctx) return;
+    audio.building = true;
+    try {
+      const buf = await renderMusic();
+      const s = audio.ctx.createBufferSource(); s.buffer = buf; s.loop = true; s.connect(audio.music); s.start();
+      audio.src = s;
+    } catch(e) {}
+    audio.building = false;
+  }
+  function musicRate(r){ if (audio.src) audio.src.playbackRate.setTargetAtTime(r, audio.ctx.currentTime, .12); }
+  function noiseHit({ dur, f0, f1, type='lowpass', q=.8, vol=.5, att=.01 }){
+    const a = audio.ctx; if (!a) return; const t = a.currentTime;
+    const s = a.createBufferSource(); s.buffer = audio.noise; s.loop = true;
+    const f = a.createBiquadFilter(); f.type = type; f.Q.value = q;
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t+dur);
+    const g = a.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t+att); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+    s.connect(f).connect(g).connect(audio.sfx); s.start(t); s.stop(t+dur+.05);
+  }
+  function blip(type, f0, f1, dur, vol, delay=0){
+    const a = audio.ctx; if (!a) return; const t = a.currentTime + delay;
+    const o = a.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t+dur);
+    const g = a.createGain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t+.008); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+    o.connect(g).connect(audio.sfx); o.start(t); o.stop(t+dur+.05);
+  }
+  const SFX = {
+    boost(){ noiseHit({ dur:.45, f0:300, f1:1600, vol:.35, att:.04 }); blip('sawtooth', 70, 140, .4, .08); },
+    kill(){ blip('triangle', 880, 900, .12, .22); blip('triangle', 1320, 1350, .18, .2, .09); },
+    death(){ noiseHit({ dur:1.3, f0:2200, f1:90, vol:.8, att:.005 }); blip('sine', 110, 28, .7, .7); },
+    roll(){ noiseHit({ dur:.55, f0:350, f1:2600, type:'bandpass', q:1.3, vol:.5, att:.08 }); },
+    pass(){ blip('sine', 1500, 2400, .12, .12); },
+    bounty(){ [523,659,784,1047].forEach((f,i) => blip('triangle', f, f*1.01, .16, .22, i*.07)); blip('sine', 1568, 1600, .4, .14, .3); },
+    close(){ noiseHit({ dur:.22, f0:1800, f1:5200, type:'highpass', q:.7, vol:.32, att:.01 }); },
+    streak(level){
+      // louder and fuller each tier: double, triple, ace
+      const v = level >= 5 ? .5 : level >= 3 ? .36 : .26;
+      const notes = level >= 5 ? [523,659,784,1047,1319,1568] : level >= 3 ? [587,740,880,1175] : [659,880,988];
+      notes.forEach((f,i) => blip('square', f, f*1.005, .12, v*.55, i*.06));
+      notes.forEach((f,i) => blip('triangle', f/2, f/2, .2, v, i*.06));
+      if (level >= 5) noiseHit({ dur:.6, f0:300, f1:6000, type:'bandpass', q:.6, vol:.3, att:.02 });
+    },
+    revenge(){ [392,330,262,523].forEach((f,i) => blip('sawtooth', f, f*.98, .16, .22, i*.08)); blip('sine', 90, 40, .5, .5); },
+    buff(){ blip('triangle', 660, 680, .1, .2); blip('triangle', 990, 1010, .1, .2, .07); blip('triangle', 1320, 1340, .22, .22, .14); }
+  };
+  let hum = null;
+  function humStart(){
+    const a = audio.ctx; if (!a || hum) return; const t = a.currentTime;
+    try {
+      const o = a.createOscillator(), o2 = a.createOscillator(), lp = a.createBiquadFilter(), g = a.createGain();
+      o.type = 'sawtooth'; o2.type = 'sine';
+      o.frequency.setValueAtTime(90, t); o.frequency.linearRampToValueAtTime(240, t+3);     // rises while you hold the draft
+      o2.frequency.setValueAtTime(180, t); o2.frequency.linearRampToValueAtTime(480, t+3);
+      lp.type = 'lowpass'; lp.frequency.setValueAtTime(500, t); lp.frequency.linearRampToValueAtTime(1600, t+3);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(.09, t+.3);
+      o.connect(lp); o2.connect(lp); lp.connect(g).connect(audio.sfx); o.start(t); o2.start(t);
+      hum = { o, o2, g };
+    } catch(e) {}
+  }
+  function humStop(){
+    if (!hum || !audio.ctx) return; const t = audio.ctx.currentTime, h = hum; hum = null;
+    try { h.g.gain.cancelScheduledValues(t); h.g.gain.setTargetAtTime(.0001, t, .08); h.o.stop(t+.4); h.o2.stop(t+.4); } catch(e) {}
+  }
+  function sfx(name){ if (audio.ctx && !audio.muted) try { SFX[name](); } catch(e) {} }
+  function setMuted(m){
+    audio.muted = m; ls.set('contrail-muted', m ? '1' : '0');
+    if (audio.master) audio.master.gain.setTargetAtTime(m ? 0 : 1, audio.ctx.currentTime, .05);
+    $('mute').setAttribute('aria-pressed', String(m)); $('mute').setAttribute('aria-label', m ? 'Unmute sound' : 'Mute sound');
+    $('mute-label').textContent = m ? 'Muted' : 'Sound';
+    $('wave').toggleAttribute('hidden', m); $('cross').toggleAttribute('hidden', !m);
+  }
+  $('mute').addEventListener('click', () => { ensureAudio(); setMuted(!audio.muted); });
+  setMuted(audio.muted);
+
+  // ================= JETS =================
+  function newName(){
+    let n, tries = 0;
+    do { n = NAMES[Math.floor(Math.random()*NAMES.length)] + '-' + (1 + Math.floor(Math.random()*9)); tries++; }
+    while (jets.some(j => j.name === n) && tries < 50);
+    return n;
+  }
+  function makeJet(o){ return Object.assign({ x:0,y:0,a:0,fuel:0,life:LIFE_BASE,pts:[],alive:false,protect:0,stall:0,boost:false,kills:0,respawn:0,bb:[0,0,0,0],ai:{} }, o); }
+
+  function spawn(j){
+    let bx = W/2, by = H/2, bs = -1;
+    for (let i=0;i<24;i++){
+      const x = rand(260,W-260), y = rand(260,H-260); let s = 1e9;
+      for (const o of jets){
+        if (!o.alive || o===j) continue;
+        s = Math.min(s, Math.hypot(o.x-x, o.y-y));
+        for (let k=0;k<o.pts.length;k+=4){ const p=o.pts[k]; const d=Math.hypot(p.x-x,p.y-y); if (d<s) s=d; }
+      }
+      if (s>bs){ bs=s; bx=x; by=y; }
+    }
+    j.x=bx; j.y=by; j.a = Math.atan2(H/2-by, W/2-bx) + rand(-.8,.8);
+    j.pts=[{x:bx,y:by,t:time}]; j.born=time; j.alive=true; j.protect=PROTECT; j.stall=0; j.boost=false; j.kills=0;
+    j.fuel = START_LEN;                                   // every new jet, you or a respawning bot, starts at length 30
+    j.life = j.isPlayer ? lifeOf(j.fuel) : BOT_LIFE; j.runBest = j.fuel;
+    j.rollT = 0; j.rollCD = 0; j.rollDir = 1; j.rollShield = false; j.passOwner = null; j.boostT = 0; j.av = 0;
+    j.slip = 0; j.slipOn = false; j.draftT = 0; j.slipLost = 0; j.fadeIdx = 0;
+    j.buff = null; j.streak = 0; j.lastKillAt = -99; j.flares = 0; j.score = 0; j.crownT = 0;
+    j.ai = { t:rand(0,.2), want:j.a, cx:bx, cy:by, r:rand(180,340), dir:Math.random()<.5?1:-1, ct:rand(8,14),
+             boostT:0, phase:'idle', phaseEnd:0, coolUntil:0, tgt:null, wx:rand(300,W-300), wy:rand(300,H-300),
+             mode:'build', loopAcc:0, lastTh:null, trap:false, side: Math.random()<.5 ? 1 : -1,
+             likesDrop: Math.random() < (j.persona==='coward'?.2:.6) };
+  }
+
+  function startRoll(j, dir){
+    if (!j.alive || j.rollT > 0) return false;
+    let flare = false;
+    if (j.rollCD > 0){
+      if (!(j.flares > 0)) return false;
+      j.flares = 0; flare = true;                          // a swipe during cooldown spends the stored Flares charge
+    }
+    j.rollT = ROLL_T; if (!flare) j.rollCD = rollCdMax();   // a flare roll leaves the running cooldown as it was
+    j.rollDir = dir || 1; j.passOwner = null;
+    if (flare){ burst(j.x, j.y, '#ffffff', 16, .6); if (j.isPlayer) dlog('FLARES spent', { cooldownLeft: j.rollCD.toFixed(1)+'s' }); }
+    j.rollShield = true;                                   // good for exactly one enemy trail
+    if (j.isPlayer){ sfx('roll'); dlog('ROLL start', { shield:'on' }); }
+    return true;
+  }
+
+  const newOrb = () => ({ x:rand(30,W-30), y:rand(30,H-30), v:1, r:3.2, type:0, ph:rand(0,6) });
+
+  // ---- setup ----
+  const player = makeJet({ isPlayer:true, name:'YOU', color:COL.you });
+  jets.push(player);
+  PERSONAS.forEach((p,i) => { const b = makeJet({ persona:p, color:BOT_COLORS[i], skill:SKILL[p], noise:NOISE[p] }); jets.push(b); b.name = newName(); });
+  jets.forEach(j => { if (!j.isPlayer) spawn(j); });
+  for (let i=0;i<ORBS;i++) orbs.push(newOrb());
+
+  // ================= INPUT =================
+  const pointer = { down:false, x:0, y:0, ox:0, oy:0, sx:0, sy:0, downAt:0, id:null, a0:0 };
+  let lastTapWasTap = false, padHeld = false;
+  const pad = $('pad');
+  const padOn = e => { if (state !== 'play') return; e.preventDefault(); padHeld = true; pad.classList.add('held'); try { pad.setPointerCapture(e.pointerId); } catch(_) {} };
+  const padOff = () => { padHeld = false; pad.classList.remove('held'); };
+  pad.addEventListener('pointerdown', padOn);
+  pad.addEventListener('pointerup', padOff); pad.addEventListener('pointercancel', padOff); pad.addEventListener('lostpointercapture', padOff);
+  pad.addEventListener('contextmenu', e => e.preventDefault());
+  const STICK_R = 64;
+  let steerMode = ls.get('contrail-steer') === 'halves' ? 'halves' : 'stick';
+  let lastUp = 0, boostHeld = false;
+  const keys = { l:false, r:false, boost:false };
+  const touches = new Map();
+  function takePrimary(id, t){
+    pointer.down = true; pointer.id = id; pointer.x = pointer.ox = pointer.sx = t.x; pointer.y = pointer.oy = pointer.sy = t.y; pointer.downAt = t.downAt;
+    pointer.a0 = player.a;
+  }
+  cv.addEventListener('pointerdown', e => {
+    if (state !== 'play') return;
+    const now = performance.now(), t = { x:e.clientX, y:e.clientY, downAt:now };
+    touches.set(e.pointerId, t);
+    if (!pointer.down){
+      takePrimary(e.pointerId, t);
+      boostHeld = steerMode === 'stick' && lastTapWasTap && (now - lastUp) < 300;
+    }
+    try { cv.setPointerCapture(e.pointerId); } catch(_) {}
+  });
+  cv.addEventListener('pointermove', e => {
+    const t = touches.get(e.pointerId); if (t){ t.x = e.clientX; t.y = e.clientY; }
+    if (!pointer.down || e.pointerId !== pointer.id) return;
+    pointer.x = e.clientX; pointer.y = e.clientY;
+    const dx = pointer.x - pointer.ox, dy = pointer.y - pointer.oy, d = Math.hypot(dx,dy);
+    if (d > STICK_R){ pointer.ox = pointer.x - dx/d*STICK_R; pointer.oy = pointer.y - dy/d*STICK_R; }
+  });
+  const up = e => {
+    touches.delete(e.pointerId);
+    if (e.pointerId !== pointer.id) return;
+    const now = performance.now(), dur = now - pointer.downAt;
+    const sdx = e.clientX - pointer.sx, sdy = e.clientY - pointer.sy;
+    // barrel roll: an upward swipe of 60px+ that ends with the thumb lifting, all within 300ms
+    if (state === 'play' && dur < SWIPE_MS && -sdy >= SWIPE_PX && Math.abs(sdy) > Math.abs(sdx) && pointer.sy < innerHeight - SWIPE_DEAD){
+      if (startRoll(player, sdx >= 0 ? 1 : -1)){ player.av = 0; rolledOnce(); }
+    }
+    lastTapWasTap = dur < 200 && Math.hypot(sdx, sdy) < 14;
+    pointer.down = false; boostHeld = false; lastUp = now;
+    const next = touches.entries().next().value;
+    if (next){ takePrimary(next[0], next[1]); lastTapWasTap = false; }
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  addEventListener('keydown', e => {
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.l = true;
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.r = true;
+    if (e.key===' '||e.key==='Shift'){ keys.boost = true; if (state==='play') e.preventDefault(); }
+    if ((e.key==='ArrowUp'||e.key==='w'||e.key==='W') && state==='play' && !e.repeat) startRoll(player, 1);
+  });
+  addEventListener('keyup', e => {
+    if (e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.l = false;
+    if (e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.r = false;
+    if (e.key===' '||e.key==='Shift') keys.boost = false;
+  });
+
+  // ================= HELPERS =================
+  // a trail point is deadly if it is not in the owner's newest SAFE points and has not started fading
+  const isLethal = (o, k, n) => k < n - SAFE && !o.pts[k].r && (time - o.pts[k].t) < o.life - FADE;
+  const hasBuff = (j, type) => !!(j.buff && j.buff.type === type);
+  // hit radius per trail point: 2x for points laid under the Wide Trail buff, and for every point on Wide Trails day
+  const ptHit = p => (p.w || mod === 'wide') ? HIT*2 : HIT;
+  function trailHitAt(x,y,self,r){
+    for (const o of jets){
+      if (o===self || !o.alive) continue;
+      const big = r + HIT, b = o.bb;
+      if (x<b[0]-big || x>b[2]+big || y<b[1]-big || y>b[3]+big) continue;
+      const n = o.pts.length;
+      for (let k=0;k<n;k++){ const p=o.pts[k], rr = r + ptHit(p) - HIT, dx=p.x-x, dy=p.y-y; if (dx*dx+dy*dy < rr*rr && isLethal(o,k,n)) return true; }
+    }
+    return false;
+  }
+  function spawnBuff(){
+    const pool = mod === 'wide' ? BUFF_TYPES.filter(t => t !== 'wide') : BUFF_TYPES;   // no Wide Trail buff on Wide Trails day
+    const type = pool[Math.floor(Math.random()*pool.length)];
+    buff = { type, x:rand(400,W-400), y:rand(400,H-400), t0:time };
+    if (state === 'play') toast(`${BUFFS[type].name} on the minimap`, 'drop');
+    dlog('BUFF spawned', { type });
+  }
+  function applyBuff(j, type){
+    const B = BUFFS[type];
+    if (type === 'flares') j.flares = 1;                   // max 1 charge; doesn't take the timed buff slot
+    else j.buff = { type, until: time + B.dur, dur: B.dur };
+    burst(j.x, j.y, B.color, 18, .8);
+    if (j.isPlayer){ toast(B.name.toUpperCase() + '!', 'buff-' + type); sfx('buff'); }
+    else if (state === 'play') toast(`${j.name} grabbed ${B.name}`, '');
+    dlog('BUFF picked', { type, by:j.name });
+  }
+
+  function botThink(b){
+    const ai = b.ai, p = b.persona;
+    let gx = null, gy = null;
+    let nearest = null, nd = 1e9;
+    for (const o of jets){ if (o===b || !o.alive || ((p==='cutter' || ai.mode==='hunt') && time - (o.born||0) < 25)) continue; const d = Math.hypot(o.x-b.x, o.y-b.y); const w = o.isPlayer ? d*(o === bounty ? .5 : .6) : d; /* .6 -> .5: 20% more pull toward a bounty-holding player */ if (w<nd){ nd=w; nearest=o; } }
+
+    let bo = null, bs = 0, bod = 0;
+    for (const o of orbs){
+      const dx=o.x-b.x, dy=o.y-b.y;
+      if (dx>700||dx<-700||dy>700||dy<-700) continue;
+      const d = Math.hypot(dx,dy);
+      const ahead = Math.cos(angDiff(b.a, Math.atan2(dy,dx)));
+      const s = o.v*(o.type===1?1.6:1) / (d+40) * Math.max(.15, .9 + ahead);
+      if (s>bs){ bs=s; bo=o; bod=d; }
+    }
+
+    let diving = false;
+    ai.trap = false; ai.evade = false;
+    if (p==='hunter' && player.alive && player.protect <= 0){
+      const dp = Math.hypot(player.x-b.x, player.y-b.y);
+      if (dp < TRAP_RANGE){
+        // trap: cut across your nose and boost to seal it off
+        const lead = 90 + dp*.35;
+        gx = player.x + Math.cos(player.a)*lead; gy = player.y + Math.sin(player.a)*lead;
+        if (b.fuel > MIN_BOOST) ai.boostT = .35;
+        diving = true; ai.trap = true;
+      } else if (dp < STALK_RANGE){
+        // stalk: hang off your wing, waiting for an opening
+        gx = player.x + Math.cos(player.a + ai.side*1.2)*190; gy = player.y + Math.sin(player.a + ai.side*1.2)*190;
+        diving = true;
+      }
+    }
+    // cutters: if an enemy nose is inside 120px and closing, break away under boost
+    if (!diving && p==='cutter'){
+      for (const o of jets){
+        if (o===b || !o.alive) continue;
+        const dx = b.x-o.x, dy = b.y-o.y, d = Math.hypot(dx,dy) || 1;
+        if (d >= 120) continue;
+        const so = o.boost ? BOOST : SPEED, sb2 = b.boost ? BOOST : SPEED;
+        const rate = (dx*(Math.cos(b.a)*sb2 - Math.cos(o.a)*so) + dy*(Math.sin(b.a)*sb2 - Math.sin(o.a)*so)) / d;   // < 0: gap shrinking
+        if (rate < 0){
+          gx = b.x + dx/d*300; gy = b.y + dy/d*300;
+          if (b.fuel > MIN_BOOST) ai.boostT = .5;
+          ai.phase = 'idle'; ai.coolUntil = time + 1; ai.evade = true; diving = true;
+          break;
+        }
+      }
+    }
+    if (!diving && (p==='cutter' || (p==='builder' && ai.mode==='hunt'))){
+      const tg = ai.tgt;
+      if (ai.phase !== 'idle' && (!tg || !tg.alive || time - (tg.born||0) < 25)){ ai.phase = 'idle'; ai.coolUntil = time + 1; }
+      if (ai.phase === 'idle' && time > ai.coolUntil && nearest && nd < 850 && Math.hypot(nearest.x-b.x, nearest.y-b.y) >= 120){
+        ai.phase = 'warn'; ai.phaseEnd = time + .5; ai.tgt = nearest;
+      }
+      const t2 = ai.tgt, td = t2 ? Math.hypot(t2.x-b.x, t2.y-b.y) : 0;
+      if (ai.phase === 'warn' && time >= ai.phaseEnd){
+        if (td < 120){ ai.phase = 'idle'; ai.coolUntil = time + 1.5; }
+        else { ai.phase = 'dive'; ai.phaseEnd = time + 1.6; }
+      }
+      if (ai.phase === 'dive'){
+        if (time >= ai.phaseEnd || td < 120){ ai.phase = 'idle'; ai.coolUntil = time + 1.8; }
+        else {
+          const lead = 120 + td*.3;
+          gx = t2.x + Math.cos(t2.a)*lead; gy = t2.y + Math.sin(t2.a)*lead;
+          if (b.fuel > 25) ai.boostT = .3;
+          diving = true;
+        }
+      }
+    }
+    if (diving){ /* goal set above */ }
+    else if (p==='coward' && nearest && nd<280){
+      gx = b.x + (b.x-nearest.x); gy = b.y + (b.y-nearest.y);
+      if (nd<160 && b.fuel>40) ai.boostT = .4;
+    } else if (buff && Math.hypot(buff.x-b.x, buff.y-b.y) < 1600 && !(bo && bod<60)){
+      // race for the buff; boost for it when it's still a way off
+      gx = buff.x; gy = buff.y;
+      if (b.fuel > 40 && Math.hypot(buff.x-b.x, buff.y-b.y) > 300 && Math.random() < .25) ai.boostT = .5;
+    } else if (drop && dropCount>4 && ai.likesDrop && Math.hypot(drop.x-b.x, drop.y-b.y) < 1500 && !(bo && bod<90)){
+      gx = drop.x; gy = drop.y;
+    } else if (p==='builder' && ai.mode==='build' && !(bo && bod<150)){
+      ai.ct -= .17;
+      if (ai.ct<=0){ ai.cx = clamp(b.x+rand(-200,200),400,W-400); ai.cy = clamp(b.y+rand(-200,200),400,H-400); ai.r = rand(180,340); ai.dir*=-1; ai.ct = rand(8,14); ai.lastTh = null; }
+      // count how far around the circle it has flown: one full loop, then it turns hunter
+      const now = Math.atan2(b.y-ai.cy, b.x-ai.cx);
+      if (ai.lastTh !== null) ai.loopAcc += Math.abs(angDiff(ai.lastTh, now));
+      ai.lastTh = now;
+      if (ai.loopAcc >= 2*Math.PI){ ai.mode = 'hunt'; dlog('BOT builder done looping, now hunting', { bot:b.name }); }
+      const th = now + ai.dir*.5;
+      gx = ai.cx + Math.cos(th)*ai.r; gy = ai.cy + Math.sin(th)*ai.r;
+    } else if (bo){
+      gx = bo.x; gy = bo.y;
+      if (b.fuel>80 && bod>260 && Math.random()<.12) ai.boostT = .4;
+    } else {
+      if (Math.hypot(ai.wx-b.x, ai.wy-b.y) < 120){ ai.wx = rand(300,W-300); ai.wy = rand(300,H-300); }
+      gx = ai.wx; gy = ai.wy;
+    }
+
+    let desired = Math.atan2(gy-b.y, gx-b.x);
+    const m = Math.min(b.x, b.y, W-b.x, H-b.y);
+    if (m<220) desired = angLerp(desired, Math.atan2(H/2-b.y, W/2-b.x), 1 - m/220);
+    desired += (Math.random()-.5) * b.noise;
+
+    // trail avoidance; while rolling they hold course and trust the roll
+    if (b.rollT <= 0 && Math.random() < b.skill){
+      // cutters dodge 30% better: they look 30% further ahead and keep a wider berth
+      const cut = p === 'cutter', look = (70 + (ai.boostT>0?BOOST:SPEED)*.45) * (cut ? 1.3 : 1), rr = cut ? 22 : 17;
+      const blocked = ang => trailHitAt(b.x+Math.cos(ang)*look, b.y+Math.sin(ang)*look, b, rr) ||
+                             trailHitAt(b.x+Math.cos(ang)*look*.55, b.y+Math.sin(ang)*look*.55, b, rr) ||
+                             trailHitAt(b.x+Math.cos(ang)*look*.25, b.y+Math.sin(ang)*look*.25, b, rr);
+      let ok = false;
+      for (const off of [0,-.5,.5,-1,1,-1.6,1.6]){ if (!blocked(desired+off)){ desired += off; ok = true; break; } }
+      if (!ok){
+        // boxed in: sometimes roll straight through instead of turning hard
+        if ((b.rollCD <= 0 || b.flares > 0) && Math.random() < .5) startRoll(b, Math.random()<.5?1:-1);   // bots spend Flares when boxed in
+        else desired = b.a + Math.PI*.8*(Math.random()<.5?1:-1);
+      } else if (diving && b.rollCD <= 0 && Math.random() < .04){
+        startRoll(b, Math.random()<.5?1:-1);   // the odd showboat roll during a dive
+      }
+    }
+    ai.want = desired;
+    // everyone boosts now and then
+    if (b.fuel > 40 && ai.boostT <= 0 && Math.random() < .02) ai.boostT = rand(.4, .8);
+  }
+
+  // debug: say WHY you flew through a trail and lived (spawn protection, fading end, safe nose tip)
+  const passNote = new Map();
+  function noteOnce(o, msg, data){ const k = o.name + msg; if (time - (passNote.get(k)||-9) > 1){ passNote.set(k, time); dlog(msg, data); } }
+  function explainPass(j, hits){
+    if (j.protect > 0 && hits.length){ for (const o of hits) noteOnce(o, 'PASSED (spawn protection)', { through:o.name, left:j.protect.toFixed(1)+'s' }); return; }
+    const H2 = HIT*HIT;
+    for (const o of jets){
+      if (o===j || !o.alive || hits.includes(o)) continue;
+      const P = o.pts, n = P.length, b = o.bb;
+      if (j.x<b[0]-10 || j.x>b[2]+10 || j.y<b[1]-10 || j.y>b[3]+10) continue;
+      for (let k=0;k<n-1;k++){
+        const fading = k < o.fadeIdx, tip = k >= n-1-SAFE;
+        if (!fading && !tip) continue;
+        const a = P[k], c = P[k+1], vx=c.x-a.x, vy=c.y-a.y, wx=j.x-a.x, wy=j.y-a.y, L=vx*vx+vy*vy;
+        let u = L ? (wx*vx+wy*vy)/L : 0; u = u<0?0:u>1?1:u;
+        const dx = wx-u*vx, dy = wy-u*vy;
+        if (dx*dx+dy*dy < H2){ noteOnce(o, fading ? 'PASSED (fading end, harmless)' : 'PASSED (nose tip, safe)', { through:o.name }); break; }
+      }
+    }
+  }
+
+  function burst(x,y,c,n,scale=1){ for (let i=0;i<n;i++){ const a=rand(0,6.283), s=rand(40,220)*scale; parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.4,.9),c,r:2.6*Math.sqrt(scale)*rand(.7,1.3)}); } }
+
+  const sortKey = (a,b) => (b.fuel - a.fuel) || (b.kills - a.kills);
+  function updateBounty(){
+    let top = null;
+    for (const j of jets) if (j.alive && (!top || sortKey(j, top) < 0)) top = j;
+    if (top === bounty) return;
+    dlog('BOUNTY moved', { from: bounty ? bounty.name : 'none', to: top ? top.name : 'none' });
+    if (top) top.crownAt = time;
+    bounty = top;
+    if (top === player) crownSince = time;
+  }
+  // Toasts about YOUR bounty only fire once the new state has held for 1.5s, so a neck-and-neck race for #1
+  // (two jets a point apart swapping every orb) stays quiet instead of flashing "got it / lost it".
+  let crownSince = -99, crownToastState = false;
+  function bountyToasts(){
+    if (state !== 'play' || !player.alive){ crownToastState = false; return; }
+    const holding = bounty === player;
+    const settled = holding ? time - crownSince >= CROWN_SETTLE : (bounty && time - bounty.crownAt >= CROWN_SETTLE);
+    if (!settled || holding === crownToastState) return;
+    if (holding && time - gotBountyAt > 4){ toast('YOU HAVE THE BOUNTY', 'bounty'); gotBountyAt = time; }
+    else if (!holding && bounty && time - lostBountyAt > 4){ toast(`You lost the bounty to ${bounty.name}`, 'bounty'); lostBountyAt = time; }
+    crownToastState = holding;
+  }
+
+  function kill(j, killer){
+    j.alive = false;
+    const wasBounty = j === bounty;
+    const wasRevenge = j === revenge, revengeHit = wasRevenge && killer && killer.isPlayer;
+    // the wreck drops ~80% of its fuel along the trail (minimum 25 so every kill pays)
+    const st = j.pts.length>60 ? 3 : 2, count = Math.max(1, Math.ceil(j.pts.length/st));
+    const per = Math.max(25, j.fuel*.8) * (wasBounty ? 2 : 1) * (revengeHit ? 2 : 1) / count;   // bounty doubles it, revenge doubles it again
+    for (let k=0;k<j.pts.length;k+=st){ const p=j.pts[k]; const sa = rand(0, 6.283), sr = rand(6, 22); orbs.push({ x:p.x+Math.cos(sa)*sr, y:p.y+Math.sin(sa)*sr, v:per, r:4.6, type:2, c:j.color, life:20, ph:rand(0,6) }); }
+    if (j.isPlayer){
+      burst(j.x, j.y, COL.you, 140, 4); burst(j.x, j.y, COL.drop, 70, 3); burst(j.x, j.y, '#ff7a2f', 50, 2);
+      rings.push({ x:j.x, y:j.y, t:0, c:COL.you, R:560 }, { x:j.x, y:j.y, t:-.08, c:COL.drop, R:380 });
+      shake = .5; sfx('death'); musicRate(1); humStop();
+    } else {
+      burst(j.x, j.y, j.color, 30); burst(j.x, j.y, COL.drop, 10);
+      rings.push({ x:j.x, y:j.y, t:0, c:j.color, R:140 });
+    }
+    if (killer){
+      killer.kills++;
+      if (wasBounty){
+        dlog('BOUNTY claimed', { by:killer.name, on:j.name, drop:'2x' });
+        if (killer.isPlayer){ toast('BOUNTY CLAIMED!', 'bounty-claim'); sfx('bounty'); rings.push({ x:j.x, y:j.y, t:-.05, c:GOLD, R:320 }); }
+      } else if (killer.isPlayer){ toast(`Splashed ${j.name}!`, 'kill'); sfx('kill'); }
+      if (killer.isPlayer){
+        // a streak only continues if this kill came within 4s of the last one
+        killer.streak = (time - (killer.lastKillAt ?? -99) <= STREAK_GAP) ? (killer.streak||0) + 1 : 1;
+        killer.lastKillAt = time;
+        const call = { 2:'DOUBLE SPLASH', 3:'TRIPLE SPLASH', 5:'AIRSPACE CLEARED' }[killer.streak];
+        if (call){ banner(call, 'streak-' + killer.streak); sfx('streak', killer.streak); dlog('STREAK', { kills:killer.streak, call }); }
+      }
+    }
+    if (wasBounty){ bounty = null; updateBounty(); }   // hand the crown on immediately
+    if (wasRevenge){
+      if (revengeHit){ toast('REVENGE!', 'revenge'); sfx('revenge'); rings.push({ x:j.x, y:j.y, t:-.05, c:RED, R:300 }); }
+      dlog('REVENGE ' + (revengeHit ? 'taken' : 'cleared'), { on:j.name, by: killer ? killer.name : 'none' });
+      revenge = null;
+    }
+    if (j.isPlayer){
+      // remember who got you; it is marked once you respawn
+      revenge = killer && !killer.isPlayer ? killer : null;
+      if (revenge) dlog('REVENGE marked', { on:revenge.name });
+    }
+    if (j.isPlayer){
+      const rank = 1 + jets.filter(o => o!==j && o.alive && sortKey(o, j) < 0).length;
+      const runLen = Math.floor(j.runBest);
+      let newBest, showLen, showKills;
+      if (mod){
+        // today's best, saved under today's date
+        let db = { len:0, kills:0 }; try { db = Object.assign(db, JSON.parse(ls.get('contrail-daily-' + TODAY_KEY) || '{}')); } catch(e) {}
+        newBest = runLen > db.len || j.kills > db.kills;
+        db.len = Math.max(db.len, runLen); db.kills = Math.max(db.kills, j.kills); db.mod = TODAY.key;
+        ls.set('contrail-daily-' + TODAY_KEY, JSON.stringify(db));
+        showLen = db.len; showKills = db.kills;
+        $('d-bestlabel').textContent = "TODAY'S BEST · " + TODAY.name.toUpperCase();
+      } else {
+        newBest = runLen > bestLen || j.kills > bestKills;
+        if (runLen > bestLen){ bestLen = runLen; ls.set('contrail-best-length', bestLen); }
+        if (j.kills > bestKills){ bestKills = j.kills; ls.set('contrail-best-kills', bestKills); }
+        showLen = bestLen; showKills = bestKills;
+        $('d-bestlabel').textContent = 'BEST · LENGTH / KILLS';
+      }
+      deathPos = { x:j.x, y:j.y }; state = 'dead';
+      $('d-new').hidden = !newBest;
+      $('d-best').textContent = showLen;
+      $('d-bestk').textContent = showKills;
+      $('d-by').textContent = killer ? killer.name : 'unknown';
+      $('d-revenge').hidden = !revenge;
+      if (revenge) $('d-revenge').textContent = `${revenge.name} is marked with a red skull. Splash it for double length.`;
+      $('d-trail').textContent = runLen;
+      $('d-rank').textContent = `#${rank} of ${jets.length}`;
+      $('d-kills').textContent = j.kills;
+      $('d-time').textContent = Math.round(time - flightStart) + 's';
+      $('d-score').textContent = Math.floor(j.score);
+      $('d-crowned').hidden = j.crownT < 1;
+      $('d-crowned').textContent = `Crowned ${Math.floor(j.crownT)}s`;
+      pointer.down = false; boostHeld = false; touches.clear(); padOff();
+      lenDrop = 0; $('lenDelta').classList.remove('on'); pendingCC = null;
+      hideRollTip();
+      setTimeout(() => { $('toasts').replaceChildren(); pad.hidden = true; $('overlay').hidden = false; $('menu').hidden = true; $('death').hidden = false; $('again').disabled = true; }, 500);
+      setTimeout(() => { $('again').disabled = false; $('again').focus({ preventScroll:true }); }, 1000);
+    } else {
+      j.respawn = BOT_RESPAWN;
+    }
+    j.pts = [];
+  }
+
+  function spawnDrop(){
+    const x = rand(400,W-400), y = rand(400,H-400);
+    for (let i=0;i<46;i++){ const a=rand(0,6.283), r=Math.sqrt(Math.random())*90; orbs.push({ x:x+Math.cos(a)*r, y:y+Math.sin(a)*r, v:1.4, r:4.2, type:1, life:DROP_LIFE, ph:rand(0,6) }); }
+    drop = { x, y, until: time + DROP_LIFE };
+    dropCount += 46;
+    if (state==='play') toast('Fuel drop on the minimap, 8s', 'drop');
+  }
+
+  // ================= SIMULATION =================
+  let wasBoosting = false;
+  function step(dt){
+    time += dt;
+    for (const j of jets){
+      if (!j.alive){
+        if (!j.isPlayer){ j.respawn -= dt; if (j.respawn<=0){ j.name = newName(); spawn(j); } }
+        continue;
+      }
+      if (j.protect>0) j.protect -= dt;
+      // SCORE: 1 a second alive, 2 a second while holding the crown. It never turns into length.
+      const crownedNow = j === bounty;
+      j.score += dt * (crownedNow ? 2 : 1); if (crownedNow) j.crownT += dt;
+      if (j.buff && time >= j.buff.until){ if (j.isPlayer) dlog('BUFF ended', { type:j.buff.type }); j.buff = null; }
+      if (j.rollT>0){
+        j.rollT = Math.max(0, j.rollT - dt);
+        if (j.rollT === 0){ if (j.isPlayer && j.rollShield) dlog('ROLL end', { shield:'unused' }); j.rollShield = false; }
+      }
+      if (j.rollCD>0) j.rollCD = Math.max(0, j.rollCD - dt);
+      let target = null, turn = TURN;
+      if (j.isPlayer){
+        let want = 0;
+        const age = performance.now() - pointer.downAt, sdx = pointer.x - pointer.sx, sdy = pointer.y - pointer.sy;
+        const swipeLike = pointer.down && pointer.sy < innerHeight - SWIPE_DEAD && age < SWIPE_MS && -sdy > 12 && -sdy > Math.abs(sdx) && -sdy/Math.max(age, 1) > .15;
+        if (pointer.down && !swipeLike){
+          if (steerMode === 'stick'){
+            const dx = pointer.x - pointer.ox, dy = pointer.y - pointer.oy;
+            if (dx*dx+dy*dy > 196){ const d = angDiff(j.a, Math.atan2(dy,dx)); want = clamp(d*12, -TURN, TURN); }
+          } else {
+            const now = performance.now(); let sum = 0, held = 0;
+            for (const t of touches.values()){ sum += t.x < cw/2 ? -1 : 1; held = Math.max(held, (now - t.downAt)/1000); }
+            want = clamp(sum, -1, 1) * (4.2 + Math.min(1, held/.4)*4.1);
+          }
+        }
+        const kk = (keys.r?1:0) - (keys.l?1:0); if (kk) want = kk*TURN;
+        j.av = (j.av||0) + (want - (j.av||0)) * Math.min(1, dt*18);
+        j.boost = (pointer.down && boostHeld) || touches.size >= 2 || padHeld || keys.boost;
+      } else {
+        if (j.ai.phase === 'warn' && time >= j.ai.phaseEnd) j.ai.t = 0;
+        j.ai.t -= dt;
+        if (j.ai.t<=0){ botThink(j); j.ai.t = rand(.10,.16); }   // faster reactions (was .13-.21s)
+        target = j.ai.want; turn = 5.0;
+        j.ai.boostT -= dt; j.boost = j.ai.boostT > 0;
+      }
+      const ab = hasBuff(j, 'afterburner');
+      if (ab) j.boost = true;                                   // Afterburner: forced boost, free
+      else if (j.boost && j.fuel < MIN_BOOST) j.boost = false;
+      if (j.isPlayer){
+        if (j.boost !== wasBoosting){ if (j.boost) sfx('boost'); musicRate(j.boost ? 1.05 : 1); wasBoosting = j.boost; }
+        if (!boostTip && j.fuel >= MIN_BOOST){ boostTip = true; toast(steerMode === 'stick' ? 'Boost ready: double-tap and hold' : 'Boost ready: hold the boost pad'); }
+        if (!rollTip && time - flightStart > 3.2 && j.rollCD <= 0){ rollTip = true; showRollTip(); }
+      }
+      if (j.stall>0){ j.stall -= dt; if (j.isPlayer) j.av = 0; }
+      else if (j.isPlayer){ j.a += j.av*dt; }
+      else if (target!==null){ const d = angDiff(j.a, target), mx = turn*dt; j.a += clamp(d,-mx,mx); }
+      let sp = (j.boost ? BOOST : SPEED) * (1 + slipGain()*j.slip);   // slip is 0..1
+      if (j.stall>0) sp *= .35;
+      j.boostT = j.boost ? (j.boostT||0) + dt : 0;
+      if (j.boost && !ab){
+        const ramp = 1 + clamp((j.boostT - 1)/2, 0, 1)*2, burned = Math.min(j.fuel, BURN*ramp*dt);
+        j.fuel -= burned;
+        if (j.isPlayer && burned > 0){
+          lenDrop += burned; lastBurnAt = time;
+          // the tail visibly burns away: sparks where it shrinks
+          sparkT -= dt; const tail = j.pts[0];
+          if (tail && sparkT <= 0){ sparkT = .08; burst(tail.x, tail.y, '#ff9a4d', 3, .35); }
+        }
+      }
+      j.life = j.isPlayer ? lifeOf(j.fuel) : BOT_LIFE;
+      if (j.fuel > j.runBest) j.runBest = j.fuel;   // longest you got this run
+      j.x += Math.cos(j.a)*sp*dt; j.y += Math.sin(j.a)*sp*dt;
+
+      let hit = false;
+      if (j.x<0){ j.x=0; j.a=Math.PI-j.a; hit=true; } else if (j.x>W){ j.x=W; j.a=Math.PI-j.a; hit=true; }
+      if (j.y<0){ j.y=0; j.a=-j.a; hit=true; } else if (j.y>H){ j.y=H; j.a=-j.a; hit=true; }
+      if (hit){ j.stall = .45; if (j.isPlayer) burst(j.x, j.y, COL.edge, 8); }
+
+      const lp = j.pts[j.pts.length-1];
+      if (!lp || Math.hypot(j.x-lp.x, j.y-lp.y) >= SEG) j.pts.push({ x:j.x, y:j.y, t:time, r: j.rollT > 0, w: hasBuff(j, 'wide') });   // r: laid mid-roll, w: laid under Wide Trail
+      // points expire by age, not count
+      // the drawn trail never runs past TRAIL_CAP points: shorten its lifetime so the oldest stretch still fades out normally
+      if (j.pts.length > TRAIL_CAP) j.life = Math.min(j.life, time - j.pts[j.pts.length - TRAIL_CAP].t);
+      let cut = 0; while (cut < j.pts.length-2 && time - j.pts[cut].t > j.life) cut++;
+      if (cut) j.pts.splice(0, cut);
+      let fi = 0; while (fi < j.pts.length-1 && time - j.pts[fi].t >= j.life - FADE) fi++;
+      j.fadeIdx = fi;                                          // points before this are fading and harmless
+      let x0=j.x, y0=j.y, x1=j.x, y1=j.y;
+      for (const p of j.pts){ if (p.x<x0)x0=p.x; if (p.x>x1)x1=p.x; if (p.y<y0)y0=p.y; if (p.y>y1)y1=p.y; }
+      j.bb[0]=x0; j.bb[1]=y0; j.bb[2]=x1; j.bb[3]=y1;
+    }
+
+    // collisions + slipstream, measured to trail SEGMENTS (no gaps between points), live part only
+    const M = SLIP_HOLD_RANGE + 4, H2 = HIT*HIT;
+    for (const j of jets){
+      if (!j.alive) continue;
+      let passD2 = 1e12; const hitsW = new Set();         // owners touched on a Wide Trail segment (no rolling through those)                                   // nose distance to the trail this jet rolled through
+      let best2 = 1e12, bestO = null, bvx = 0, bvy = 0, bestHr = HIT, bestPt = null, bestU = 0, bestDx = 0, bestDy = 0, bestEnd = false; const hits = [];
+      for (const o of jets){
+        if (o===j || !o.alive) continue;
+        const b = o.bb;
+        if (j.x<b[0]-M || j.x>b[2]+M || j.y<b[1]-M || j.y>b[3]+M) continue;
+        const P = o.pts, last = P.length - 1 - SAFE; let touched = false, touchedW = false;
+        for (let k=o.fadeIdx; k<last; k++){
+          const a = P[k], c = P[k+1];
+          if ((a.x<j.x-M && c.x<j.x-M) || (a.x>j.x+M && c.x>j.x+M) || (a.y<j.y-M && c.y<j.y-M) || (a.y>j.y+M && c.y>j.y+M)) continue;
+          if (a.r || c.r) continue;                           // trail laid during a roll is harmless (drawn dashed)
+          const segW = !!(a.w || c.w), hr = (segW || mod === 'wide') ? HIT*2 : HIT, H2o = hr*hr;
+          const vx = c.x-a.x, vy = c.y-a.y, wx = j.x-a.x, wy = j.y-a.y, L = vx*vx+vy*vy;
+          let u = L ? (wx*vx+wy*vy)/L : 0; u = u<0?0:u>1?1:u;
+          const dx = wx-u*vx, dy = wy-u*vy, d2 = dx*dx+dy*dy;
+          if (d2 < H2o){ touched = true; if (segW) touchedW = true; }
+          if (o === j.passOwner && d2 < passD2) passD2 = d2;
+          if (d2 < best2){ best2 = d2; bestO = o; bvx = vx; bvy = vy; bestHr = hr; bestPt = a; bestU = u; bestDx = dx; bestDy = dy;
+                           bestEnd = (k === o.fadeIdx && u === 0) || (k === last-1 && u === 1); }
+        }
+        if (touched) hits.push(o);
+        if (touchedW) hitsW.add(o);
+      }
+
+      // slipstream: parallel within 40px for 0.5s
+      const dist = Math.sqrt(best2), sl = Math.hypot(bvx,bvy) || 1;
+      const align = bestO ? Math.abs((Math.cos(j.a)*bvx + Math.sin(j.a)*bvy) / sl) : 0;
+      const clear = dist >= bestHr;
+      const entry = bestO && clear && dist <= SLIP_RANGE && align >= SLIP_ALIGN;
+      const hold  = bestO && clear && dist <= SLIP_HOLD_RANGE && align >= SLIP_HOLD_ALIGN;
+      if (!j.slipOn){
+        j.draftT = entry ? j.draftT + dt : Math.max(0, j.draftT - dt*2);
+        if (j.draftT >= SLIP_ARM){
+          j.slipOn = true; j.slipLost = 0;
+          if (j.isPlayer){ dlog('SLIPSTREAM on', { behind:bestO.name, dist:dist.toFixed(0)+'px', align:align.toFixed(2) }); humStart(); }
+        }
+      } else {
+        j.slipLost = hold ? 0 : j.slipLost + dt;
+        if (j.slipLost > SLIP_LOSE){
+          j.slipOn = false; j.draftT = 0;
+          if (j.isPlayer){ dlog('SLIPSTREAM off', { dist: bestO ? dist.toFixed(0)+'px' : 'none', align:align.toFixed(2) }); humStop(); }
+        }
+      }
+      j.slip = j.slipOn ? Math.min(1, j.slip + dt/SLIP_IN) : Math.max(0, j.slip - dt/SLIP_OUT);
+
+      // close call: skim within 12px of a live enemy trail without touching it.
+      //  - once per trail segment (each segment pays out once, ever)
+      //  - only while closing in on the trail, or when skimming past the trail's end
+      //  - never while flying parallel to it: that's slipstream
+      if (j.isPlayer && bestO && !hits.length && j.protect <= 0 && dist >= bestHr && dist < CLOSE_PX && time - lastCloseCall >= 1 && !bestPt.cc){
+        const vx = Math.cos(j.a), vy = Math.sin(j.a), d = dist || 1;
+        const closing = -(vx*bestDx + vy*bestDy)/d;           // > 0 when heading toward the trail
+        const parallel = align >= SLIP_HOLD_ALIGN;             // same test slipstream uses to stay on
+        if (!parallel && (closing > .25 || bestEnd)){
+          bestPt.cc = true;                                    // this segment has paid out
+          lastCloseCall = time; slowmo = SLOWMO_T;
+          pendingCC = { at: time, past: bestO.name, gap: dist.toFixed(1), how: bestEnd ? 'past the end' : 'crossing in' };
+        }
+      }
+
+      if (j.isPlayer) explainPass(j, hits);
+      if (j.protect>0) continue;
+      // grace on the trail the shield was spent on ends once your nose is 40px clear of it, or after 1s, whichever comes first
+      if (j.passOwner && (time - j.passAt >= PASS_MAX || passD2 >= PASS_CLEAR*PASS_CLEAR)){
+        if (j.isPlayer) dlog('ROLL grace over', { on:j.passOwner.name, why: time - j.passAt >= PASS_MAX ? '1s passed' : '40px clear' });
+        j.passOwner = null;
+      }
+      let killer = null;
+      for (const o of hits){
+        const unrollable = hitsW.has(o);                       // Wide Trail segments can't be rolled through
+        if (o === j.passOwner && !unrollable) continue;
+        if (unrollable && (j.rollShield || j.rollT > 0 || o === j.passOwner)){
+          if (j.isPlayer) dlog('HIT Wide Trail segment, rolls do not work here', { by:o.name });
+          killer = o; break;
+        }
+        if (j.rollShield){
+          j.rollShield = false; j.passOwner = o; j.passAt = time;   // spent on the first trail, immediately
+          burst(j.x, j.y, '#ffffff', 12, .7);
+          if (j.isPlayer){ toast(`Rolled through ${o.name}`, 'kill'); sfx('pass'); dlog('ROLL shield used', { on:o.name, shield:'off' }); }
+          continue;
+        }
+        killer = o; break;
+      }
+      if (killer){
+        if (j.isPlayer) dlog('HIT', { by:killer.name, rolling: j.rollT>0 ? 'yes' : 'no', shield: j.rollShield ? 'on' : 'off' });
+        kill(j, killer); continue;
+      }
+    }
+
+    // a close call pays out (+5 score, never length) only if you survived it
+    if (pendingCC && time - pendingCC.at >= CC_CONFIRM){
+      if (player.alive){
+        player.score += 5;
+        floaters.push({ x:player.x, y:player.y, t:0, text:'CLOSE CALL +5', c:COL.fuel });
+        sfx('close'); dlog('CLOSE CALL', { past:pendingCC.past, gap:pendingCC.gap+'px', how:pendingCC.how });
+      }
+      pendingCC = null;
+    }
+
+    // fuel
+    let n0 = 0; dropCount = 0;
+    for (const o of orbs){ if (o.type===0) n0++; else if (o.type===1) dropCount++; }
+    for (let i=0;i<4 && n0<ORBS;i++,n0++) orbs.push(newOrb());
+    for (let i=orbs.length-1;i>=0;i--){
+      const o = orbs[i]; let gone = false;
+      if (o.life!==undefined){ o.life -= dt; if (o.life<=0) gone = true; }
+      if (!gone){
+        for (const j of jets){
+          if (!j.alive) continue;
+          const dx = j.x-o.x, dy = j.y-o.y;
+          if (dx>64||dx<-64||dy>64||dy<-64) continue;
+          const d2 = dx*dx+dy*dy;
+          if (d2 < 22*22){ j.fuel += o.v * (mod === 'fuel' && o.type !== 2 ? 3 : 1); gone = true; break; }   // Fuel Rush: map fuel 3x
+          else if (d2 < 64*64){ const pull = j.isPlayer ? 6 : 4; o.x += dx*dt*pull; o.y += dy*dt*pull; }
+        }
+      }
+      if (gone){ orbs[i] = orbs[orbs.length-1]; orbs.pop(); }
+    }
+    dropT -= dt;
+    if (dropT<=0){ spawnDrop(); dropT = DROP_EVERY; }
+    if (!buff){ buffT -= dt; if (buffT <= 0) spawnBuff(); }
+    else {
+      for (const j of jets){
+        if (!j.alive) continue;
+        if (Math.hypot(j.x-buff.x, j.y-buff.y) < BUFF_R){ applyBuff(j, buff.type); buff = null; buffT = BUFF_RESPAWN; break; }
+      }
+    }
+    if (drop && (dropCount<=4 || time >= drop.until)) drop = null;
+
+    bountyT -= dt; if (bountyT <= 0){ bountyT = .25; updateBounty(); bountyToasts(); }
+    if (shake>0) shake -= dt;
+    for (let i=rings.length-1;i>=0;i--){ rings[i].t += dt; if (rings[i].t > .55) rings.splice(i,1); }
+    for (let i=floaters.length-1;i>=0;i--){ floaters[i].t += dt; if (floaters[i].t > 1.1) floaters.splice(i,1); }
+    for (let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.96; p.vy*=.96; if (p.life<=0){ parts[i]=parts[parts.length-1]; parts.pop(); } }
+  }
+
+  // ================= CAMERA =================
+  let attract = 1, viewF = 1;
+  function updateCam(dt){
+    let t;
+    if (player.alive) t = player;
+    else if (deathPos) t = deathPos;
+    else { let a = jets[attract]; if (!a || !a.alive){ attract = 1 + Math.floor(Math.random()*(jets.length-1)); a = jets[attract]; } t = a.alive ? a : cam; }
+    if (player.alive || deathPos){ cam.x = t.x; cam.y = t.y; }
+    else { const k = Math.min(1, dt*10); cam.x += (t.x-cam.x)*k; cam.y += (t.y-cam.y)*k; }
+    const life = player.alive ? player.life : LIFE_BASE;
+    viewF = clamp(1/Math.sqrt(1 + (life-LIFE_BASE)/3), .45, 1);   // 6s -> 1, 15s -> .5
+    const tz = Math.min(cw,ch)/620 * viewF * (player.alive && player.boost ? .85 : 1);
+    cam.z += (tz-cam.z)*Math.min(1, dt*3);
+  }
+
+  // ================= RENDER =================
+  function trailPath(p, a, b, head){
+    ctx.beginPath(); ctx.moveTo(p[a].x, p[a].y);
+    for (let i=a+1;i<=b;i++) ctx.lineTo(p[i].x, p[i].y);
+    if (head) ctx.lineTo(head.x, head.y);
+  }
+  function drawTrail(j){
+    const p = j.pts, n = p.length; if (n<2) return;
+    const crowned = j === bounty;                                   // crown: gold trail (visual only)
+    const dayWide = mod === 'wide', wm = dayWide ? 2 : 1;
+    const core = crowned ? GOLD : (j.isPlayer ? COL.you : j.color), glow = crowned ? GOLD : (j.isPlayer ? COL.youGlow : j.color);
+    const sb = j.isPlayer && time - (j.lastKillAt ?? -99) <= STREAK_GAP ? Math.min(j.streak||0, 5) : 0;          // kill streak: brighter glow per kill, up to 5
+    // fading section: oldest points in their last FADE seconds; harmless, drawn thin and dissolving
+    let fadeIdx = 0; while (fadeIdx < n-1 && time - p[fadeIdx].t >= j.life - FADE) fadeIdx++;
+    if (fadeIdx > 0){
+      const bands = 4, per = Math.max(1, Math.ceil(fadeIdx/bands));
+      ctx.strokeStyle = core; ctx.lineWidth = wm*Math.min(6, Math.max(3, 1.3/cam.z));
+      for (let a=0; a<fadeIdx; a+=per){
+        const b = Math.min(fadeIdx, a+per), mid = p[Math.floor((a+b)/2)];
+        const left = clamp((j.life - (time - mid.t))/FADE, 0, 1);
+        trailPath(p, a, b, null); ctx.globalAlpha = .5*left; ctx.stroke();
+      }
+    }
+    const lethalEnd = Math.max(fadeIdx, n - 1 - SAFE);
+    // split the live trail into runs: 'roll' (laid mid-roll: dashed, faint, harmless), 'wide' (laid under Wide Trail), 'n' (normal)
+    const kind = k => (p[k].r || p[k+1].r) ? 'roll' : (p[k].w || p[k+1].w) ? 'wide' : 'n';
+    const runs = []; let rs = fadeIdx;
+    for (let k = fadeIdx; k < lethalEnd; k++){
+      const cur = kind(k), next = k+1 < lethalEnd ? kind(k+1) : null;
+      if (next !== cur){ runs.push([rs, k+1, cur]); rs = k+1; }
+    }
+    const hs = Math.max(fadeIdx, n - 12);
+    for (const [a, b, rk] of runs){
+      const roll = rk === 'roll';
+      if (rk === 'wide'){
+        // Wide Trail: thick, with a bright green glowing edge so you know you can't roll through it
+        const G = BUFFS.wide.color, base = Math.min(12, Math.max(5, 2/cam.z));
+        trailPath(p, a, b, null);
+        ctx.strokeStyle = G;
+        ctx.globalAlpha = .18; ctx.lineWidth = Math.max(40, 8/cam.z); ctx.stroke();
+        ctx.globalAlpha = .4;  ctx.lineWidth = Math.max(26, 5.5/cam.z); ctx.stroke();
+        ctx.globalAlpha = 1;   ctx.lineWidth = base*2 + Math.max(6, 2.4/cam.z); ctx.stroke();      // the bright edge
+        ctx.strokeStyle = core; ctx.globalAlpha = 1; ctx.lineWidth = base*2 - Math.max(2, .8/cam.z); ctx.stroke();
+        continue;
+      }
+      if (roll){
+        trailPath(p, a, b, null);
+        ctx.setLineDash([6/Math.max(cam.z,.5), 6/Math.max(cam.z,.5)]); ctx.strokeStyle = core; ctx.globalAlpha = .4;
+        ctx.lineWidth = wm*Math.min(6, Math.max(2.5, 1.1/cam.z)); ctx.stroke(); ctx.setLineDash([]);
+        continue;
+      }
+      trailPath(p, a, b, null);
+      ctx.strokeStyle = glow;
+      if (sb){ ctx.globalAlpha = .05*sb; ctx.lineWidth = wm*Math.max(30, 6/cam.z); ctx.stroke(); }
+      ctx.globalAlpha = (dayWide ? .16 : .08)*(1 + sb*.5); ctx.lineWidth = wm*Math.max(15, 3.2/cam.z); ctx.stroke();
+      ctx.globalAlpha = Math.min(1, (dayWide ? .3 : .16)*(1 + sb*.5)); ctx.lineWidth = wm*Math.max(9, 2.4/cam.z); ctx.stroke();
+      ctx.strokeStyle = core; ctx.globalAlpha = 1; ctx.lineWidth = wm*Math.min(12, Math.max(5, 2/cam.z)); ctx.stroke();
+      const h0 = Math.max(a, hs);
+      if (b > h0){ trailPath(p, h0, b, null); ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = .95; ctx.lineWidth = wm*Math.min(8, Math.max(3, 1.2/cam.z)); ctx.stroke(); }
+    }
+    // nose tip (newest couple of points, harmless): solid and thin, never dashed
+    trailPath(p, lethalEnd, n-1, j);
+    ctx.strokeStyle = core; ctx.globalAlpha = .55; ctx.lineWidth = wm*Math.min(5, Math.max(2, 1/cam.z)); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  function drawBuffIcon(x, y, type, frac, R, z){
+    const c = BUFFS[type].color;
+    ctx.fillStyle = 'rgba(5,11,29,.85)'; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.283); ctx.fill();
+    ctx.lineWidth = Math.max(2/z, R*.16);
+    ctx.strokeStyle = c; ctx.globalAlpha = .25; ctx.beginPath(); ctx.arc(x, y, R, 0, 6.283); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(x, y, R, -Math.PI/2, -Math.PI/2 + frac*6.283); ctx.stroke();   // shrinking timer ring
+    ctx.fillStyle = c; ctx.font = `800 ${R*1.15}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(BUFFS[type].letter, x, y + R*.05); ctx.textBaseline = 'alphabetic';
+  }
+  function drawSkull(x, y, R, z){
+    // red skull with a pulsing halo: the jet that last splashed you
+    const pulse = .5 + .5*Math.sin(time*6);
+    ctx.strokeStyle = RED; ctx.lineWidth = Math.max(1.5/z, R*.18);
+    ctx.globalAlpha = .35 + .45*pulse; ctx.beginPath(); ctx.arc(x, y, R*(1.4 + .25*pulse), 0, 6.283); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.arc(x, y - R*.15, R*.85, 0, 6.283); ctx.fill();               // cranium
+    ctx.fillRect(x - R*.5, y + R*.35, R, R*.55);                                        // jaw
+    ctx.fillStyle = '#050b1d';
+    ctx.beginPath(); ctx.arc(x - R*.33, y - R*.15, R*.24, 0, 6.283); ctx.arc(x + R*.33, y - R*.15, R*.24, 0, 6.283); ctx.fill();   // eyes
+    ctx.fillRect(x - R*.06, y + R*.2, R*.12, R*.2);                                    // nose
+    ctx.fillRect(x - R*.17, y + R*.5, R*.08, R*.4); ctx.fillRect(x + R*.09, y + R*.5, R*.08, R*.4);   // teeth gaps
+  }
+  function drawCrown(x, y, R, z){
+    // pulsing gold halo + crown
+    const pulse = .5 + .5*Math.sin(time*5);
+    ctx.strokeStyle = GOLD; ctx.lineWidth = Math.max(1.5/z, R*.18);
+    ctx.globalAlpha = .35 + .45*pulse; ctx.beginPath(); ctx.arc(x, y, R*(1.35 + .25*pulse), 0, 6.283); ctx.stroke();
+    ctx.globalAlpha = .12; ctx.fillStyle = GOLD; ctx.beginPath(); ctx.arc(x, y, R*(1.35 + .25*pulse), 0, 6.283); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = GOLD;
+    ctx.beginPath();
+    ctx.moveTo(x - R, y + R*.55); ctx.lineTo(x - R, y - R*.35); ctx.lineTo(x - R*.5, y + R*.05); ctx.lineTo(x, y - R*.75);
+    ctx.lineTo(x + R*.5, y + R*.05); ctx.lineTo(x + R, y - R*.35); ctx.lineTo(x + R, y + R*.55); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(5,11,29,.8)'; ctx.lineWidth = 1/z; ctx.stroke();
+  }
+  function drawJet(j, z){
+    const s = 1.25 * Math.sqrt(.62 / Math.min(.62, viewF));
+    ctx.save(); ctx.translate(j.x, j.y); ctx.rotate(j.a);
+    if (j.protect>0) ctx.globalAlpha = Math.sin(time*22)>0 ? 1 : .3;
+    if (j.rollT > 0){ const ph = 1 - j.rollT/ROLL_T; ctx.scale(1, Math.cos(ph*2*Math.PI) || .001); }   // wings flip through the roll
+    if (j.boost){
+      const a0 = ctx.globalAlpha, f = 1 + Math.random()*.35;
+      ctx.beginPath(); ctx.moveTo(-5*s,-4.5*s); ctx.lineTo(-24*f*s,0); ctx.lineTo(-5*s,4.5*s); ctx.closePath();
+      ctx.fillStyle = '#ff7a2f'; ctx.globalAlpha = a0*.85; ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-5*s,-2.4*s); ctx.lineTo(-14*f*s,0); ctx.lineTo(-5*s,2.4*s); ctx.closePath();
+      ctx.fillStyle = '#fff3c4'; ctx.globalAlpha = a0; ctx.fill();
+    }
+    if (j.slip > .05){
+      // slipstream shimmer: flickering wake lines off the wingtips
+      const a0 = ctx.globalAlpha; ctx.strokeStyle = COL.fuel; ctx.lineWidth = 1.4*s; ctx.lineCap = 'round';
+      for (const side of [-1,1]) for (let i=0;i<2;i++){
+        const x0 = -8*s - rand(0,6)*s, L = rand(8,18)*s*j.slip;
+        ctx.globalAlpha = a0*j.slip*rand(.35,.9);
+        ctx.beginPath(); ctx.moveTo(x0, side*(7.5+i*2.5)*s); ctx.lineTo(x0 - L, side*(7.5+i*2.5)*s); ctx.stroke();
+      }
+      ctx.globalAlpha = a0;
+    }
+    ctx.beginPath(); ctx.moveTo(12*s,0); ctx.lineTo(-8*s,-7*s); ctx.lineTo(-4*s,0); ctx.lineTo(-8*s,7*s); ctx.closePath();
+    ctx.fillStyle = j.isPlayer ? '#ffffff' : j.color; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = COL.void; ctx.stroke();
+    if (j.slip > .05){
+      ctx.globalAlpha = j.slip*(.45 + .45*Math.sin(time*38)); ctx.strokeStyle = COL.fuel; ctx.lineWidth = 2.2; ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (j.ai && (j.ai.phase === 'warn' || j.ai.trap)){
+      ctx.globalAlpha = 1; ctx.strokeStyle = '#ffffff'; ctx.lineCap = 'round'; ctx.lineWidth = 3.4*s;
+      ctx.beginPath(); ctx.moveTo(-5*s,-12*s); ctx.lineTo(-5*s,12*s); ctx.stroke();
+    }
+    ctx.restore();
+    if (j.protect>0){
+      ctx.beginPath(); ctx.arc(j.x, j.y, 20, 0, 6.283);
+      ctx.strokeStyle = j.isPlayer ? COL.youGlow : j.color; ctx.globalAlpha = .45; ctx.lineWidth = 1.5/z*1.4; ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    if (j.isPlayer && j.flares > 0){
+      // stored Flares charge: a small white roll icon (circular arrow) at the top-right of the roll ring
+      const r = 22*s/1.25, px = j.x + Math.cos(-Math.PI/4)*(r + 9/z), py = j.y + Math.sin(-Math.PI/4)*(r + 9/z), ir = 6/z;
+      ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(5,11,29,.85)'; ctx.beginPath(); ctx.arc(px, py, ir*1.6, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = '#ffffff'; ctx.fillStyle = '#ffffff'; ctx.lineWidth = 1.8/z; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(px, py, ir, -Math.PI*.1, Math.PI*1.45); ctx.stroke();
+      const hx = px + Math.cos(-Math.PI*.1)*ir, hy = py + Math.sin(-Math.PI*.1)*ir;
+      ctx.beginPath(); ctx.moveTo(hx + 3.2/z, hy - .4/z); ctx.lineTo(hx - 1.4/z, hy - 3.6/z); ctx.lineTo(hx - .8/z, hy + 2.6/z); ctx.closePath(); ctx.fill();
+    }
+    if (j.isPlayer && j.rollCD > 0){
+      // roll cooldown: a small ring that fills back up
+      const r = 22*s/1.25, prog = 1 - j.rollCD/rollCdMax();
+      ctx.lineWidth = 2/z;
+      ctx.strokeStyle = COL.fuel; ctx.globalAlpha = .15; ctx.beginPath(); ctx.arc(j.x, j.y, r, 0, 6.283); ctx.stroke();
+      ctx.globalAlpha = .7; ctx.beginPath(); ctx.arc(j.x, j.y, r, -Math.PI/2, -Math.PI/2 + prog*6.283); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    // badges stack upward above the jet: buff, then SLIPSTREAM, then the bounty crown
+    const baseY = j.isPlayer ? j.y - 26/z - 10 : j.y - 15 - 26/z, slotH = 24/z; let slot = 0;
+    if (j.buff){
+      const frac = clamp((j.buff.until - time)/j.buff.dur, 0, 1);
+      drawBuffIcon(j.x, baseY - slotH*slot++, j.buff.type, frac, 10/z, z);
+    }
+    if (j.isPlayer && j.slip > .05){
+      ctx.font = `700 ${11/z}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center';
+      const ty = baseY - slotH*slot++ + 4/z, tw = ctx.measureText('SLIPSTREAM').width + 12/z, th = 17/z;
+      ctx.globalAlpha = Math.min(1, j.slip*1.5);
+      ctx.fillStyle = 'rgba(5,11,29,.75)'; ctx.fillRect(j.x - tw/2, ty - th*.78, tw, th);
+      ctx.strokeStyle = COL.fuel; ctx.lineWidth = 1/z; ctx.strokeRect(j.x - tw/2, ty - th*.78, tw, th);
+      ctx.fillStyle = COL.fuel; ctx.fillText('SLIPSTREAM', j.x, ty);
+      ctx.globalAlpha = 1;
+    }
+    if (j === bounty) drawCrown(j.x, baseY - slotH*slot++, 9/z, z);
+    if (j === revenge) drawSkull(j.x, baseY - slotH*slot++, 9/z, z);
+    if (!j.isPlayer){
+      ctx.font = `600 ${12/z}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(233,240,255,.72)'; ctx.fillText(j.name, j.x, j.y - 15 - 6/z);
+    }
+  }
+
+  function render(){
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.fillStyle = COL.void; ctx.fillRect(0,0,cw,ch);
+    const sh = shake>0 ? 14*(shake/.5) : 0;
+    const z = cam.z, ox = cw/2 - cam.x*z + (Math.random()*2-1)*sh, oy = ch/2 - cam.y*z + (Math.random()*2-1)*sh;
+    // quick camera tilt during your barrel roll
+    const tilt = player.alive && player.rollT > 0 ? Math.sin((1 - player.rollT/ROLL_T)*Math.PI) * .1 * player.rollDir : 0;
+    ctx.translate(cw/2, ch/2); ctx.rotate(tilt); ctx.translate(-cw/2 + ox, -ch/2 + oy); ctx.scale(z, z);
+    const mg = 120/z;
+    const vx0 = -ox/z - mg, vy0 = -oy/z - mg, vx1 = (cw-ox)/z + mg, vy1 = (ch-oy)/z + mg;
+
+    ctx.fillStyle = COL.sky; ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle = COL.grid; ctx.lineWidth = 1/z; ctx.beginPath();
+    const G = 150;
+    for (let x = Math.max(0, Math.floor(vx0/G)*G); x <= Math.min(W, vx1); x += G){ ctx.moveTo(x, Math.max(0,vy0)); ctx.lineTo(x, Math.min(H,vy1)); }
+    for (let y = Math.max(0, Math.floor(vy0/G)*G); y <= Math.min(H, vy1); y += G){ ctx.moveTo(Math.max(0,vx0), y); ctx.lineTo(Math.min(W,vx1), y); }
+    ctx.stroke();
+    ctx.strokeStyle = COL.edge; ctx.globalAlpha = .7; ctx.lineWidth = 4; ctx.strokeRect(0,0,W,H); ctx.globalAlpha = 1;
+
+    for (const o of orbs){
+      if (o.x<vx0||o.x>vx1||o.y<vy0||o.y>vy1) continue;
+      const c = o.type===0 ? COL.fuel : o.type===1 ? COL.drop : o.c;
+      const r = Math.max(o.r, 1.4/z) * (o.type===1 ? 1 + .22*Math.sin(time*5+o.ph) : 1);
+      const fade = o.life!==undefined && o.life<3 ? o.life/3 : 1;
+      ctx.fillStyle = c;
+      ctx.globalAlpha = (o.type===2 ? .34 : .18)*fade; ctx.beginPath(); ctx.arc(o.x,o.y,r*(o.type===2 ? 3 : 2.6),0,6.283); ctx.fill();
+      ctx.globalAlpha = fade; ctx.beginPath(); ctx.arc(o.x,o.y,r,0,6.283); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (buff && buff.x>vx0-200/z && buff.x<vx1+200/z && buff.y>vy0-200/z && buff.y<vy1+200/z){
+      // a 24px icon on screen (12px radius, whatever the zoom) in the buff's color with its letter, inside a big pulsing beacon
+      const c = BUFFS[buff.type].color, px = 1/z, pulse = .5 + .5*Math.sin(time*5), R = 12*px*(1 + .12*pulse);
+      for (let i = 0; i < 2; i++){                                 // two expanding rings that read from across the screen
+        const ph = ((time*.8 + i*.5) % 1);
+        ctx.strokeStyle = c; ctx.globalAlpha = (1 - ph)*.7; ctx.lineWidth = 2.5*px;
+        ctx.beginPath(); ctx.arc(buff.x, buff.y, (16 + ph*70)*px, 0, 6.283); ctx.stroke();
+      }
+      ctx.fillStyle = c; ctx.globalAlpha = .22 + .14*pulse; ctx.beginPath(); ctx.arc(buff.x, buff.y, 30*px, 0, 6.283); ctx.fill();
+      ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(buff.x, buff.y, R, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5*px; ctx.stroke();
+      ctx.fillStyle = '#05101f'; ctx.font = `800 ${15*px}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(BUFFS[buff.type].letter, buff.x, buff.y + .5*px);
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = `700 ${11*px}px "Chakra Petch", sans-serif`; ctx.fillStyle = c;
+      ctx.fillText(BUFFS[buff.type].name.toUpperCase(), buff.x, buff.y + 30*px + 14*px);
+    }
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const j of jets){ if (!j.alive) continue; const b=j.bb; if (b[2]<vx0||b[0]>vx1||b[3]<vy0||b[1]>vy1) continue; drawTrail(j); }
+    for (const j of jets){ if (j.alive && j.x>vx0 && j.x<vx1 && j.y>vy0 && j.y<vy1) drawJet(j, z); }
+    for (const r of rings){
+      if (r.t < 0) continue;
+      const k = r.t/.55;
+      ctx.globalAlpha = 1 - k; ctx.strokeStyle = r.c; ctx.lineWidth = (6*(1-k)+1)/z;
+      ctx.beginPath(); ctx.arc(r.x, r.y, 12 + k*r.R, 0, 6.283); ctx.stroke();
+    }
+    for (const f of floaters){
+      ctx.globalAlpha = clamp(1.3 - f.t*1.2, 0, 1);
+      ctx.font = `700 ${14/z}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center';
+      ctx.lineWidth = 3/z; ctx.strokeStyle = 'rgba(5,11,29,.9)';
+      const fy = f.y - 34/z - f.t*50/z;
+      ctx.strokeText(f.text, f.x, fy); ctx.fillStyle = f.c; ctx.fillText(f.text, f.x, fy);
+    }
+    ctx.globalAlpha = 1;
+    for (const p of parts){ ctx.globalAlpha = clamp(p.life*1.6,0,1); ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    if (player.alive && (player.boost || player.slip > .3)){
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      const ca = Math.cos(player.a), sa = Math.sin(player.a), nS = player.boost ? 16 : 12;
+      ctx.strokeStyle = player.boost ? COL.you : COL.fuel; ctx.lineWidth = 1.5;
+      for (let i=0;i<nS;i++){
+        const x = Math.random()*cw, y = Math.random()*ch, L = rand(30,80);
+        ctx.globalAlpha = rand(.08,.22);
+        ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x - ca*L, y - sa*L); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    // off-screen markers: gold arrow toward the bounty holder, red arrow toward your revenge target
+    const edgeArrow = (tgt, color, m) => {
+      if (!tgt || !tgt.alive || tgt.isPlayer || state !== 'play') return;
+      const sx = (tgt.x - cam.x)*cam.z + cw/2, sy = (tgt.y - cam.y)*cam.z + ch/2;
+      if (sx < 0 || sx > cw || sy < 0 || sy > ch){
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        const dx = sx - cw/2, dy = sy - ch/2;
+        const t = Math.min((cw/2 - m)/Math.max(1e-6, Math.abs(dx)), (ch/2 - m)/Math.max(1e-6, Math.abs(dy)));
+        const ax = cw/2 + dx*t, ay = ch/2 + dy*t, ang = Math.atan2(dy, dx), pulse = .5 + .5*Math.sin(time*5);
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
+        ctx.globalAlpha = .22 + .2*pulse; ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, 15, 0, 6.283); ctx.fill();
+        ctx.globalAlpha = 1; ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-7, -8); ctx.lineTo(-3, 0); ctx.lineTo(-7, 8); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(5,11,29,.85)'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.restore();
+      }
+    };
+    edgeArrow(bounty, GOLD, 26);
+    edgeArrow(revenge, RED, 56);    // sits a little further in, so the two never overlap
+    if (state === 'play' && player.alive && bounty === player){
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      for (const o of jets){
+        if (o === player || !o.alive) continue;
+        const dx = player.x - o.x, dy = player.y - o.y, d = Math.hypot(dx, dy);
+        if (d > THREAT_R || d < 1) continue;
+        if ((Math.cos(o.a)*dx + Math.sin(o.a)*dy)/d < THREAT_COS) continue;   // not pointed at you
+        // place the arrow on the screen edge in the threat's direction
+        const sx = (o.x - cam.x)*cam.z, sy = (o.y - cam.y)*cam.z, m = 40;
+        const t = Math.min((cw/2 - m)/Math.max(1e-6, Math.abs(sx)), (ch/2 - m)/Math.max(1e-6, Math.abs(sy)));
+        const ax = cw/2 + sx*t, ay = ch/2 + sy*t, ang = Math.atan2(sy, sx), pulse = .5 + .5*Math.sin(time*9);
+        ctx.save(); ctx.translate(ax, ay); ctx.rotate(ang);
+        ctx.globalAlpha = .75 + .25*pulse; ctx.fillStyle = RED;
+        ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -10); ctx.lineTo(-3, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (state === 'play' && pointer.down){
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if (steerMode === 'stick'){
+        ctx.strokeStyle = COL.fuel; ctx.globalAlpha = .28; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(pointer.ox, pointer.oy, STICK_R, 0, 6.283); ctx.stroke();
+        ctx.fillStyle = COL.fuel; ctx.globalAlpha = .32;
+        ctx.beginPath(); ctx.arc(pointer.x, pointer.y, 20, 0, 6.283); ctx.fill();
+      } else {
+        ctx.fillStyle = COL.fuel; ctx.globalAlpha = .05;
+        ctx.fillRect(pointer.x < cw/2 ? 0 : cw/2, 0, cw/2, ch);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawMinimap(){
+    if (mm.hidden) return;
+    const S = mm.width, k = S/W;
+    mctx.setTransform(1,0,0,1,0,0); mctx.clearRect(0,0,S,S);
+    mctx.strokeStyle = 'rgba(142,240,255,.08)'; mctx.lineWidth = 1;
+    for (let i=1;i<4;i++){ mctx.beginPath(); mctx.moveTo(i*S/4,0); mctx.lineTo(i*S/4,S); mctx.moveTo(0,i*S/4); mctx.lineTo(S,i*S/4); mctx.stroke(); }
+    if (drop){
+      const left = clamp((drop.until - time)/DROP_LIFE, 0, 1), dx = drop.x*k, dy = drop.y*k;
+      mctx.strokeStyle = 'rgba(255,200,87,.25)'; mctx.lineWidth = 4;
+      mctx.beginPath(); mctx.arc(dx, dy, 14, 0, 6.283); mctx.stroke();
+      mctx.strokeStyle = COL.drop;
+      mctx.beginPath(); mctx.arc(dx, dy, 14, -Math.PI/2, -Math.PI/2 + left*6.283); mctx.stroke();
+      mctx.fillStyle = COL.drop; mctx.globalAlpha = .6 + .4*Math.sin(time*8);
+      mctx.beginPath(); mctx.arc(dx, dy, 5, 0, 6.283); mctx.fill(); mctx.globalAlpha = 1;
+    }
+    if (buff){
+      // a dot in the buff's own color, with a pulsing ring so it stands out from the jets
+      const c = BUFFS[buff.type].color, bx = buff.x*k, by = buff.y*k, pr = 11 + 3*Math.sin(time*6);
+      mctx.strokeStyle = c; mctx.globalAlpha = .7; mctx.lineWidth = 3; mctx.beginPath(); mctx.arc(bx, by, pr, 0, 6.283); mctx.stroke();
+      mctx.globalAlpha = 1; mctx.fillStyle = c; mctx.beginPath(); mctx.arc(bx, by, 6.5, 0, 6.283); mctx.fill();
+      mctx.strokeStyle = 'rgba(5,11,29,.9)'; mctx.lineWidth = 1.5; mctx.stroke();
+    }
+    for (const j of jets){
+      if (!j.alive || j.isPlayer) continue;
+      mctx.fillStyle = j.color; mctx.beginPath(); mctx.arc(j.x*k, j.y*k, 3.5, 0, 6.283); mctx.fill();
+    }
+    if (revenge && revenge.alive){
+      const rx = revenge.x*k, ry = revenge.y*k;
+      mctx.strokeStyle = RED; mctx.lineWidth = 3; mctx.beginPath(); mctx.arc(rx, ry, 9 + 2*Math.sin(time*6), 0, 6.283); mctx.stroke();
+    }
+    if (bounty && bounty.alive){
+      const bx = bounty.x*k, by = bounty.y*k, pr = 8 + 3*Math.sin(time*5);
+      mctx.strokeStyle = GOLD; mctx.lineWidth = 3; mctx.beginPath(); mctx.arc(bx, by, pr, 0, 6.283); mctx.stroke();
+      if (!bounty.isPlayer){ mctx.fillStyle = GOLD; mctx.beginPath(); mctx.arc(bx, by, 5, 0, 6.283); mctx.fill(); }
+    }
+    if (player.alive){
+      mctx.save(); mctx.translate(player.x*k, player.y*k); mctx.rotate(player.a);
+      mctx.fillStyle = '#ffffff'; mctx.beginPath(); mctx.moveTo(10,0); mctx.lineTo(-6,-6); mctx.lineTo(-3,0); mctx.lineTo(-6,6); mctx.closePath(); mctx.fill();
+      mctx.restore();
+    }
+  }
+
+  // ================= HUD =================
+  let hudT = 0;
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+  function hudTick(dt){
+    hudT -= dt; if (hudT>0) return; hudT = .2;
+    updateBounty();                       // refresh the crown right before drawing the board so they always agree
+    if (state==='play' && time - flightStart > 5) $('hint').style.opacity = '0';
+    const alive = jets.filter(j => j.alive).sort(sortKey);
+    $('bountyTag').hidden = !(player.alive && bounty === player && state === 'play' && time - crownSince >= .6);
+    if (player.alive){
+      $('score').textContent = Math.floor(player.fuel);
+      // "-N": how much length the current burn has cost; fades a moment after you stop boosting
+      const ld = $('lenDelta');
+      if (lenDrop >= 1){ ld.textContent = '-' + Math.floor(lenDrop); ld.classList.add('on'); }
+      if (time - lastBurnAt > .9 && ld.classList.contains('on')){ ld.classList.remove('on'); lenDrop = 0; }
+      $('kills').textContent = player.kills;
+      $('pts').textContent = Math.floor(player.score);
+      $('x2').hidden = bounty !== player;
+      $('rank').textContent = `${alive.indexOf(player)+1}/${jets.length}`;
+    }
+    const top = alive.slice(0,5);
+    const row = (j,i) => `<div class="row${j.isPlayer?' you':''}${j===bounty?' crown':''}"><span>${i+1}</span><span>${esc(j.name)}</span><span>${Math.floor(j.fuel)}</span></div>`;
+    let html = top.map(row).join('');
+    if (player.alive && !top.includes(player)) html += row(player, alive.indexOf(player));
+    $('board').innerHTML = html;
+  }
+
+  // "SWIPE UP TO ROLL" shows once, the first time the roll is ready, until you've rolled at least once on this device
+  let rollTipTimer = 0;
+  if (ls.get('contrail-rolled') === '1') rollTip = true;
+  function showRollTip(){
+    const el = $('rolltip'); el.hidden = false; requestAnimationFrame(() => el.classList.add('on'));
+    clearTimeout(rollTipTimer); rollTipTimer = setTimeout(hideRollTip, 3000);
+  }
+  function hideRollTip(){ const el = $('rolltip'); el.classList.remove('on'); setTimeout(() => { if (!el.classList.contains('on')) el.hidden = true; }, 350); }
+  function rolledOnce(){ ls.set('contrail-rolled', '1'); rollTip = true; hideRollTip(); }
+  // big center banner, one at a time (a streak and a revenge on the same kill play back to back)
+  function banner(text, kind){ bannerQ.push([text, kind]); if (!bannerBusy) nextBanner(); }
+  function nextBanner(){
+    const item = bannerQ.shift(); const el = $('banner');
+    if (!item){ bannerBusy = false; el.hidden = true; return; }
+    bannerBusy = true; el.hidden = false; el.textContent = item[0]; el.className = 'hud ' + item[1];
+    void el.offsetWidth; el.classList.add('show');
+    setTimeout(nextBanner, 1250);
+  }
+  // One toast at a time: a new one replaces whatever is showing, and each lasts 2s.
+  // (So two bounty messages can never sit on screen together.)
+  let toastTimer = 0;
+  function toast(text, kind){
+    const box = $('toasts');
+    let el = box.firstElementChild;
+    if (!el){ el = document.createElement('div'); box.appendChild(el); }
+    while (box.children.length > 1) box.lastElementChild.remove();
+    el.className = 'toast ' + (kind||''); el.textContent = text;
+    void el.offsetWidth; el.classList.add('on');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('on'), TOAST_MS);
+  }
+
+  // ================= FLOW =================
+  let wake = null;
+  function fly(){
+    ensureAudio();                     // the Fly tap is the gesture that unlocks sound
+    $('overlay').hidden = true; $('menu').hidden = true; $('death').hidden = true;
+    ['stats','board','minimap'].forEach(id => $(id).hidden = false);
+    padOff(); pad.hidden = steerMode !== 'halves';
+    const firstFlight = state === 'menu';
+    mod = gameMode === 'daily' ? TODAY.key : null;          // set before spawning so cooldowns and rules start right
+    $('modeTag').hidden = !mod; $('modeTag').textContent = mod ? 'TODAY: ' + TODAY.name.toUpperCase() : '';
+    spawn(player); player.isPlayer = true;
+    state = 'play'; flightStart = time; deathPos = null; wasBoosting = false; musicRate(1); humStop();
+    if (DEBUG) $('debug').hidden = false;
+    $('hint').hidden = false; $('hint').style.opacity = firstFlight ? '1' : '0';
+    try { if (navigator.wakeLock && !wake) navigator.wakeLock.request('screen').then(w => { wake = w; w.addEventListener('release', () => { wake = null; }); }).catch(() => {}); } catch(e) {}
+  }
+  const STEER_TEXT = {
+    stick: ['Put your thumb down anywhere and drag the way you want to fly. Let go to fly straight.', '<b>Drag</b> anywhere to steer. <b>Double-tap and hold</b> to boost. <b>Swipe up</b> to roll.'],
+    halves: ['Hold the left or right half of the screen to turn that way. The turn tightens the longer you hold.', '<b>Hold left or right</b> to turn. Hold the <b>boost pad</b> to boost. <b>Swipe up</b> to roll.']
+  };
+  function setSteer(m){
+    steerMode = m; ls.set('contrail-steer', m);
+    document.querySelectorAll('.seg button[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    $('howto-steer').textContent = STEER_TEXT[m][0];
+    $('howto-boost').textContent = m === 'stick' ? 'Double-tap and hold, or add a second finger. Boosting burns fuel.' : 'Hold the boost pad at the bottom, or add a second finger. Boosting burns fuel.';
+    $('hint').innerHTML = STEER_TEXT[m][1];
+    pad.hidden = !(m === 'halves' && state === 'play');
+  }
+  document.querySelectorAll('.seg button[data-mode]').forEach(b => b.addEventListener('click', () => setSteer(b.dataset.mode)));
+  let gameMode = ls.get('contrail-mode') === 'daily' ? 'daily' : 'classic';
+  function setMode(m){
+    gameMode = m; ls.set('contrail-mode', m);
+    document.querySelectorAll('.seg button[data-gm]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.gm === m)));
+  }
+  document.querySelectorAll('.seg button[data-gm]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.gm)));
+  document.querySelectorAll('.today-name').forEach(el => el.textContent = TODAY.name);
+  document.querySelectorAll('.today-desc').forEach(el => el.textContent = TODAY.desc);
+  setMode(gameMode);
+  setSteer(steerMode);
+  $('fly').addEventListener('click', fly);
+  $('again').addEventListener('click', fly);
+  addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || $('overlay').hidden) return;
+    if (!$('menu').hidden) fly(); else if (!$('death').hidden && !$('again').disabled) fly();
+  });
+
+  // ================= LOOP =================
+  let last = performance.now();
+  function frame(now){
+    let dt = Math.min(.05, (now-last)/1000); last = now;
+    if (slowmo > 0){ slowmo -= dt; dt *= SLOWMO_RATE; }      // close-call slow motion (counted in real time)
+    const sub = Math.max(1, Math.ceil(BOOST*(1+slipGain())*dt / 4));
+    for (let i=0;i<sub;i++) step(dt/sub);
+    updateCam(dt); render(); drawMinimap(); hudTick(dt);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>
+// installable app: Android install button, iPhone hint, offline support
+(() => {
+  const btn = document.getElementById('install');
+  let deferred = null;
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; btn.hidden = false; });
+  btn.addEventListener('click', async () => { if (!deferred) return; deferred.prompt(); try { await deferred.userChoice; } catch(e) {} deferred = null; btn.hidden = true; });
+  addEventListener('appinstalled', () => { btn.hidden = true; });
+  const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone) document.getElementById('ios-hint').hidden = false;
+  if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+})();
+</script>
+</body>
+</html>

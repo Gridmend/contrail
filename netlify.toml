@@ -1,0 +1,3 @@
+# Contrail.io is a static site: no build step, publish the repo root as-is.
+[build]
+  publish = "."

@@ -1,0 +1,30 @@
+CONTRAIL.IO - WEB APP
+=====================
+
+PUT IT ONLINE (about 2 minutes, from a computer)
+1. Unzip this file. You get a folder called "contrail".
+2. Go to https://app.netlify.com/drop and sign in (a free account works).
+3. Drag the whole "contrail" folder onto the page.
+4. Netlify gives you a link like https://something-random.netlify.app
+   Rename it under Site configuration > Change site name (for example contrail-io).
+
+INSTALL IT ON A PHONE
+- Android (Chrome): open the link, tap "Install app" on the menu,
+  or use the browser menu > Add to Home screen.
+- iPhone (Safari): open the link, tap Share > Add to Home Screen.
+It then opens full screen like a normal app and plays offline.
+
+UPDATING THE GAME LATER
+1. Replace index.html with the new one.
+2. In sw.js, change VERSION (for example contrail-v0.4.3 -> contrail-v0.4.4).
+3. On Netlify open your site > Deploys, and drag the folder onto it again.
+Players get the new version the next time they open the game online.
+
+WHAT'S IN THE FOLDER
+index.html            the game
+manifest.webmanifest  tells phones it's an app (name, icon, full screen)
+sw.js                 offline support
+icons/                app icons for Android, iPhone and the browser tab
+_headers              Netlify setting so updates are never stuck in a cache
+
+Debug log on screen: add #debug to the end of the link.
