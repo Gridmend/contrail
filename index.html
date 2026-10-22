@@ -166,7 +166,7 @@ body{
   padding-right:max(16px, env(safe-area-inset-right,0px));
 }
 .card{
-  width:100%; max-width:340px; background:var(--panel); border:1px solid var(--line);
+  width:100%; max-width:382px; box-sizing:border-box; min-width:0; background:var(--panel); border:1px solid var(--line);
   border-radius:10px; padding:22px 20px 20px; display:grid; gap:16px;
   backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
 }
@@ -216,6 +216,8 @@ body{
   border:1px solid var(--line); border-radius:8px; padding:12px; width:100%; box-sizing:border-box; user-select:text; -webkit-user-select:text; touch-action:manipulation}
 .card input::placeholder{color:rgba(147,164,204,.5)}
 .card input:focus-visible{outline:2px solid var(--fuel); outline-offset:1px}
+.callrow{display:grid; grid-template-columns:auto 1fr; align-items:center; gap:10px}
+.callrow input{font-size:16px; padding:8px 10px}
 .joinrow{display:grid; grid-template-columns:1fr auto; gap:8px}
 .or{margin:4px 0 0; text-align:center; color:var(--muted); font-size:13px}
 .code{font-family:var(--display); font-size:52px; font-weight:700; letter-spacing:.2em; color:var(--drop); text-align:center; line-height:1; padding-left:.2em}
@@ -270,6 +272,7 @@ body{
     <div class="today"><span class="stat-label">TODAY</span><b class="today-name"></b><span class="today-desc"></span></div>
     <div class="seg" role="group" aria-label="Mode"><span class="stat-label">MODE</span><button type="button" data-gm="classic" aria-pressed="true">Classic</button><button type="button" data-gm="daily" aria-pressed="false">Daily</button></div>
     <div class="seg" role="group" aria-label="Steering"><span class="stat-label">STEERING</span><button type="button" data-mode="stick" aria-pressed="true">Joystick</button><button type="button" data-mode="halves" aria-pressed="false">Halves</button></div>
+    <div class="callrow"><label class="stat-label" for="callsign">CALLSIGN</label><input id="callsign" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="MAVERICK"></div>
     <button class="btn" id="fly" type="button">Fly</button>
     <button class="btn-ghost" id="friends" type="button">Play with friends</button>
     <ul class="howto">
@@ -291,7 +294,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine">v0.4 · single player against 12 bots</p>
+    <p class="fine">v0.5.1 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -1686,7 +1689,21 @@ body{
   let wake = null;
   // GoatCounter events (only on the real site; the script may not have loaded yet, or be blocked)
   function track(path){ try { if (window.goatcounter && window.goatcounter.count) window.goatcounter.count({ path, event: true }); } catch(e) {} }
+  // ---------- callsign ----------
+  const cleanName = v => String(v || '').toUpperCase().replace(/[^A-Z0-9 -]/g, '').trim().slice(0, 10) || 'PILOT';
+  function callsign(){ return ls.get('contrail-name') || ''; }
+  function setCallsign(v){
+    const n = String(v || '').trim() ? cleanName(v) : '';
+    ls.set('contrail-name', n); net.name = n || 'PILOT';
+    player.name = n || 'YOU';
+    $('callsign').value = n; $('pname').value = n;
+  }
+  ['callsign','pname'].forEach(id => $(id).addEventListener('change', e => setCallsign(e.target.value)));
+  $('callsign').addEventListener('keydown', e => { if (e.key === 'Enter') e.target.blur(); });
+  setCallsign(callsign());
+
   function fly(){
+    setCallsign($('callsign').value);
     ensureAudio();                     // the Fly tap is the gesture that unlocks sound
     track('round-start');
     $('overlay').hidden = true; $('menu').hidden = true; $('death').hidden = true;
@@ -1883,7 +1900,7 @@ body{
       }
       if (!j.alive && alive){ j.pts = []; j.x = a[2]; j.y = a[3]; j.a = a[4]; j.born = time; }   // fresh spawn: no trail from the old spot
       j.alive = alive;
-      j.isPlayer = mine; j.name = mine ? 'YOU' : a[5]; j.color = mine ? COL.you : a[6];
+      j.isPlayer = mine; j.name = mine ? player.name : a[5]; j.color = mine ? COL.you : a[6];
       j.boost = !!a[8]; j.rollT = a[9]; j.rollDir = a[10];
       j.buff = a[11] ? { type:a[11], until: time + a[12], dur: a[13] } : null;
       j.protect = a[14]; j.slip = a[15]; j.fuel = a[16]; j.kills = a[17]; j.score = a[18]; j.life = a[19];
@@ -1972,7 +1989,7 @@ body{
   function showRooms(){
     $('menu').hidden = true; $('death').hidden = true; $('rooms').hidden = false; $('overlay').hidden = false;
     $('room-pick').hidden = net.role !== 'solo'; $('lobby').hidden = net.role === 'solo';
-    $('pname').value = ls.get('contrail-name') || '';
+    $('pname').value = callsign();
   }
   function showLobby(){
     setRoomBusy(false); roomError('');
@@ -1998,16 +2015,15 @@ body{
     roomError(msg); $('room-back').textContent = 'Back to menu';
     $('room-back').onclick = () => location.reload();
   }
-  const cleanName = v => String(v || '').toUpperCase().replace(/[^A-Z0-9 -]/g, '').trim().slice(0, 10) || 'PILOT';
   $('friends').addEventListener('click', () => { ensureAudio(); showRooms(); });
   $('create').addEventListener('click', () => {
-    net.name = cleanName($('pname').value); ls.set('contrail-name', net.name);
+    setCallsign($('pname').value);
     connect(() => netSend({ t:'create', name: net.name }));
   });
   $('join').addEventListener('click', () => {
     const code = $('jcode').value.toUpperCase().replace(/[^A-Z]/g, '');
     if (code.length !== 4){ roomError('Room codes are 4 letters.'); return; }
-    net.name = cleanName($('pname').value); ls.set('contrail-name', net.name);
+    setCallsign($('pname').value);
     connect(() => netSend({ t:'join', code, name: net.name }));
   });
   $('jcode').addEventListener('keydown', e => { if (e.key === 'Enter') $('join').click(); });
