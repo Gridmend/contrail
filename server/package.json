@@ -1,0 +1,10 @@
+{
+  "name": "contrail-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Room relay for Contrail.io private multiplayer: the room host's phone runs the game, this passes messages between phones.",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "8.18.0" }
+}
