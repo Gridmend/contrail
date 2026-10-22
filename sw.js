@@ -1,5 +1,5 @@
 // Contrail.io offline support. Bump VERSION whenever you upload a new build.
-const VERSION = 'contrail-v0.6.4';
+const VERSION = 'contrail-v0.6.5';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-192.png', 'icons/maskable-512.png',
   'icons/apple-touch-icon.png', 'icons/favicon-32.png'];

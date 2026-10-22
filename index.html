@@ -310,7 +310,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine" id="ver">v0.6.4 · 12 bots, or fly with friends</p>
+    <p class="fine" id="ver">v0.6.5 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -380,6 +380,25 @@ body{
   const mm = document.getElementById('minimap'), mctx = mm.getContext('2d');
   const $ = id => document.getElementById(id);
 
+  // ---- BOT SKILL: tune the bot tiers here ----
+  // count:    how many bots of this tier (they respawn in the same tier)
+  // personas: behaviour for each of those bots (hunter / cutter / coward / builder)
+  // dodge:    chance (0-1) that the bot swerves when an enemy trail is within reflexPx of its nose
+  // delay:    seconds before that swerve starts
+  // lookAhead: also plans its route around trails further out (and rolls when boxed in)
+  // hunts:    false = never chases anyone (builders never switch to hunting)
+  // ignorePlayerSecs / ignorePlayerUntilLen: leaves humans alone for the first N seconds of each life,
+  //           and leaves any human alone until that human is longer than this
+  const BOT_SKILL = {
+    reflexPx: 80,
+    rookie:  { count:4, personas:['coward','builder','coward','builder'],         dodge:0,  delay:0,  lookAhead:false, hunts:false },
+    regular: { count:5, personas:['cutter','builder','coward','cutter','hunter'], dodge:.5, delay:.3, lookAhead:false, hunts:true },
+    ace:     { count:3, personas:['hunter','hunter','cutter'],                     dodge:1,  delay:0,  lookAhead:true,  hunts:true,
+               ignorePlayerSecs:20, ignorePlayerUntilLen:80 }
+  };
+  const BOT_TIERS = ['rookie', 'regular', 'ace'];
+  const BOT_LINEUP = BOT_TIERS.flatMap(t => Array.from({ length: BOT_SKILL[t].count }, (_, i) => ({ tier:t, persona: BOT_SKILL[t].personas[i % BOT_SKILL[t].personas.length] })));
+
   // ---- tuning ----
   const W = 4500, H = 4500,   /* 1.5x wider and taller (was 3000) */ SEG = 7, SPEED = 170, BOOST = 306, TURN = 8.3;
   const SAFE = 2, HIT = 6.5, PROTECT = 3, BOT_RESPAWN = 2.5, SPAWN_CLEAR = 400;
@@ -423,18 +442,11 @@ body{
 
   const COL = { you:'#f4f8ff', youGlow:'#8ef0ff', fuel:'#8ef0ff', drop:'#ffc857', edge:'#ff9f5a',
     grid:'rgba(140,170,255,0.07)', sky:'#0b1633', void:'#050b1d' };
-  const BOT_COUNT = 12;   // 3 hunters, 3 cutters, 3 cowards, 3 builders
+  const BOT_COUNT = BOT_LINEUP.length;   // set by BOT_SKILL above
   // distinct bright hues for each bot, avoiding the buff colors and gold
   const BOT_COLORS = ['#ff6b8a','#ffb454','#7dff9b','#c58bff','#5fd4ff','#ff7d4f','#4fffd2','#ff8de0','#9fb6ff',
                       '#ff9fb3','#d4a2ff','#7fd1ff','#b8f36a','#ffa07a','#6fe3c0','#f7b0ff','#a8c8ff','#8ff0a4','#e48cff','#72b4ff'];
   const NAMES = ['VIPER','GHOST','NOMAD','BANDIT','RAZOR','COBRA','DUSTER','HAWK','SABRE','TALON','FLINT','RAVEN','ROOK','WIDOW','BLAZE'];
-  // roughly 40% cutters, 30% cowards, 30% builders, whatever the bot count
-  // 3 hunters, then cutters / cowards / builders for the rest (13 bots -> 3 hunters, 4 cutters, 3 cowards, 3 builders)
-  const HUNTERS = 3;
-  const PERSONAS = Array.from({ length: BOT_COUNT }, (_, i) => i < HUNTERS ? 'hunter'
-    : ['cutter','coward','builder','cutter','coward','builder','cutter','coward','builder','cutter'][(i - HUNTERS) % 10]);
-  // every bot checks for trails in front of it on every think (they still die when boxed in or cut off)
-  const SKILL = { cutter:1, coward:1, builder:1, hunter:1 };
   const NOISE = { cutter:.25, coward:.12, builder:.15, hunter:.18 };   // steering wobble
   const TRAP_RANGE = 300, STALK_RANGE = 600;           // hunters: trap the player inside 300px, shadow them inside 600px
 
@@ -732,7 +744,7 @@ body{
 
   const player = makeJet({ isPlayer:true, name:'YOU', color: lookHex(myLook), look: myLook });
   jets.push(player);
-  PERSONAS.forEach((p,i) => { const b = makeJet({ persona:p, color:BOT_COLORS[i], skill:SKILL[p], noise:NOISE[p] }); jets.push(b); b.name = newName(); });
+  BOT_LINEUP.forEach((L,i) => { const b = makeJet({ persona:L.persona, tier:L.tier, color:BOT_COLORS[i], noise:NOISE[L.persona] }); jets.push(b); b.name = newName(); });
   jets.forEach(j => { if (!j.isPlayer) spawn(j); });
   for (let i=0;i<ORBS;i++) addOrb(newOrb());
 
@@ -847,10 +859,11 @@ body{
     return false;
   }
   // Reflex: is there an enemy trail within 80px ahead of the nose? If so, the clearest heading to swerve to.
-  const DODGE_AHEAD = 80, DODGE_R = 10;
+  const DODGE_R = 10;
   function clearAhead(j, ang){
     const c = Math.cos(ang), sn = Math.sin(ang);
-    for (const d of [20, 40, 60, DODGE_AHEAD]) if (trailHitAt(j.x + c*d, j.y + sn*d, j, DODGE_R)) return false;
+    const A = BOT_SKILL.reflexPx;
+    for (const d of [A*.25, A*.5, A*.75, A]) if (trailHitAt(j.x + c*d, j.y + sn*d, j, DODGE_R)) return false;
     return true;
   }
   function reflexDodge(j){
@@ -880,10 +893,12 @@ body{
   }
 
   function botThink(b){
-    const ai = b.ai, p = b.persona;
+    const ai = b.ai, p = b.persona, T = BOT_SKILL[b.tier] || BOT_SKILL.regular;
+    // aces leave humans alone early in their life and until that human has some length
+    const ignores = o => isHuman(o) && T.ignorePlayerSecs !== undefined && (time - (b.born||0) < T.ignorePlayerSecs || o.fuel <= T.ignorePlayerUntilLen);
     let gx = null, gy = null;
     let nearest = null, nd = 1e9;
-    for (const o of jets){ if (o===b || !o.alive || ((p==='cutter' || ai.mode==='hunt') && time - (o.born||0) < 25)) continue; const d = Math.hypot(o.x-b.x, o.y-b.y); const w = isHuman(o) ? d*(o === bounty ? .5 : .6) : d; /* .6 -> .5: 20% more pull toward a bounty-holding player */ if (w<nd){ nd=w; nearest=o; } }
+    for (const o of jets){ if (o===b || !o.alive || ignores(o) || ((p==='cutter' || ai.mode==='hunt') && time - (o.born||0) < 25)) continue; const d = Math.hypot(o.x-b.x, o.y-b.y); const w = isHuman(o) ? d*(o === bounty ? .5 : .6) : d; /* .6 -> .5: 20% more pull toward a bounty-holding player */ if (w<nd){ nd=w; nearest=o; } }
 
     let bo = null, bs = 0, bod = 0;
     for (const o of orbs){
@@ -899,8 +914,8 @@ body{
     ai.trap = false; ai.evade = false;
     // hunters go after the nearest human (you, or a friend in a room)
     let prey = null, pd = 1e9;
-    for (const o of jets){ if (isHuman(o) && o.alive && o.protect <= 0){ const d = Math.hypot(o.x-b.x, o.y-b.y); if (d < pd){ pd = d; prey = o; } } }
-    if (p==='hunter' && prey){
+    for (const o of jets){ if (isHuman(o) && o.alive && o.protect <= 0 && !ignores(o)){ const d = Math.hypot(o.x-b.x, o.y-b.y); if (d < pd){ pd = d; prey = o; } } }
+    if (p==='hunter' && prey && T.hunts){
       const dp = pd;
       if (dp < TRAP_RANGE){
         // trap: cut across your nose and boost to seal it off
@@ -930,7 +945,7 @@ body{
         }
       }
     }
-    if (!diving && (p==='cutter' || (p==='builder' && ai.mode==='hunt'))){
+    if (!diving && T.hunts && (p==='cutter' || (p==='builder' && ai.mode==='hunt'))){
       const tg = ai.tgt;
       if (ai.phase !== 'idle' && (!tg || !tg.alive || time - (tg.born||0) < 25)){ ai.phase = 'idle'; ai.coolUntil = time + 1; }
       if (ai.phase === 'idle' && time > ai.coolUntil && nearest && nd < 850 && Math.hypot(nearest.x-b.x, nearest.y-b.y) >= 120){
@@ -968,7 +983,7 @@ body{
       const now = Math.atan2(b.y-ai.cy, b.x-ai.cx);
       if (ai.lastTh !== null) ai.loopAcc += Math.abs(angDiff(ai.lastTh, now));
       ai.lastTh = now;
-      if (ai.loopAcc >= 2*Math.PI){ ai.mode = 'hunt'; dlog('BOT builder done looping, now hunting', { bot:b.name }); }
+      if (ai.loopAcc >= 2*Math.PI && T.hunts){ ai.mode = 'hunt'; dlog('BOT builder done looping, now hunting', { bot:b.name }); }
       const th = now + ai.dir*.5;
       gx = ai.cx + Math.cos(th)*ai.r; gy = ai.cy + Math.sin(th)*ai.r;
     } else if (bo){
@@ -985,7 +1000,7 @@ body{
     desired += (Math.random()-.5) * b.noise;
 
     // trail avoidance; while rolling they hold course and trust the roll
-    if (b.rollT <= 0 && Math.random() < b.skill){
+    if (b.rollT <= 0 && T.lookAhead){
       // cutters dodge 30% better: they look 30% further ahead and keep a wider berth
       const cut = p === 'cutter', look = (70 + (ai.boostT>0?BOOST:SPEED)*.45) * (cut ? 1.3 : 1), rr = cut ? 22 : 17;
       const blocked = ang => trailHitAt(b.x+Math.cos(ang)*look, b.y+Math.sin(ang)*look, b, rr) ||
@@ -1194,9 +1209,19 @@ body{
         j.ai.t -= dt;
         if (j.ai.t<=0){ botThink(j); j.ai.t = rand(.10,.16); }   // faster reactions (was .13-.21s)
         target = j.ai.want; turn = 5.0;
-        if (j.rollT <= 0){
+        const TS = BOT_SKILL[j.tier] || BOT_SKILL.regular;
+        if (j.rollT <= 0 && TS.dodge > 0){
           j.ai.rx = (j.ai.rx || 0) - dt;
-          if (j.ai.rx <= 0){ j.ai.rx = 1/30; j.ai.dodge = reflexDodge(j); }
+          if (j.ai.rx <= 0){
+            j.ai.rx = 1/30;
+            const threat = !clearAhead(j, j.a), ep = j.ai.ep;
+            if (threat && (!ep || time > ep.until)){
+              // a new close call: decide once whether this bot reacts, and when
+              j.ai.ep = { go: Math.random() < TS.dodge, at: time + TS.delay, until: time + .6 };
+            } else if (threat) ep.until = time + .6;                // same threat: keep the decision
+            const e = j.ai.ep;
+            j.ai.dodge = threat && e && e.go && time >= e.at ? reflexDodge(j) : null;
+          }
           if (j.ai.dodge !== null && j.ai.dodge !== undefined){ target = j.ai.dodge; turn = 7.5; }   // reflex beats whatever it was planning
         }
         j.ai.boostT -= dt; j.boost = j.ai.boostT > 0;
@@ -1626,7 +1651,7 @@ body{
     if (j === revenge) drawSkull(j.x, baseY - slotH*slot++, 9/z, z);
     if (!j.isPlayer){
       ctx.font = `600 ${12/z}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(233,240,255,.72)'; ctx.fillText(j.name, j.x, j.y - 15 - 6/z);
+      ctx.fillStyle = 'rgba(233,240,255,.72)'; ctx.fillText(devMode && j.tier ? `${j.name} · ${j.tier.toUpperCase()}` : j.name, j.x, j.y - 15 - 6/z);
     }
   }
 
@@ -1997,13 +2022,17 @@ body{
     if (remoteByNet(id)) return;
     // a friend takes a bot's seat (preferring a non-hunter), so the arena stays the same size
     let bi = -1;
-    for (let i = jets.length-1; i >= 0; i--){ const b = jets[i]; if (!isHuman(b) && b.persona !== 'hunter'){ bi = i; break; } }
-    if (bi < 0) for (let i = jets.length-1; i >= 0; i--) if (!isHuman(jets[i])){ bi = i; break; }
+    // prefer a regular that isn't a hunter, then any regular, then a rookie, so the aces stay in the sky
+    const pick = ok => { for (let i = jets.length-1; i >= 0; i--){ const x = jets[i]; if (!isHuman(x) && ok(x)) return i; } return -1; };
+    bi = pick(x => x.tier === 'regular' && x.persona !== 'hunter');
+    if (bi < 0) bi = pick(x => x.tier === 'regular');
+    if (bi < 0) bi = pick(x => x.tier === 'rookie');
+    if (bi < 0) bi = pick(() => true);
     const used = new Set(jets.filter(isHuman).map(j => j.color));
     const color = HUMAN_COLORS.find(c => !used.has(c)) || HUMAN_COLORS[0];
     const lk = net.looks[id] || null;
     const j = makeJet({ remote:true, netId:id, name, color: lk ? lookHex(lk) : color, look: lk, persona:'human', input: NO_INTENT, rs:0 });
-    if (bi >= 0){ const b = jets[bi]; if (b === bounty) bounty = null; if (b === revenge) revenge = null; jets.splice(bi, 1, j); }
+    if (bi >= 0){ const b = jets[bi]; j.seat = { tier:b.tier, persona:b.persona }; if (b === bounty) bounty = null; if (b === revenge) revenge = null; jets.splice(bi, 1, j); }
     else jets.push(j);
     if (net.started) spawn(j);
     netSend({ t:'orbs', to:id, o: orbs.map(packOrb) });       // their map starts identical to ours
@@ -2013,8 +2042,8 @@ body{
   function removeRemote(id){
     const i = jets.findIndex(j => j.remote && j.netId === id); if (i < 0) return;
     const j = jets[i]; if (j === bounty) bounty = null; if (j === revenge) revenge = null;
-    const p = ['cutter','coward','builder'][Math.floor(Math.random()*3)];
-    const b = makeJet({ persona:p, color: BOT_COLORS[i % BOT_COLORS.length], skill:SKILL[p], noise:NOISE[p] });
+    const seat = j.seat || { tier:'regular', persona:'cutter' };
+    const b = makeJet({ persona:seat.persona, tier:seat.tier, color: BOT_COLORS[i % BOT_COLORS.length], noise:NOISE[seat.persona] });
     b.name = newName(); spawn(b);
     jets.splice(i, 1, b);                                    // a bot takes the empty seat
     if (state === 'play') toast(`${j.name} left`, '');
@@ -2281,7 +2310,7 @@ body{
     if (!on){ hgKing = false; $('hg-king').setAttribute('aria-pressed', 'false');
       Object.assign(myLook, sanitizeLook(myLook, true)); ls.set('contrail-look', JSON.stringify(myLook));   // back to looks you've earned
       player.look = myLook; player.color = lookHex(myLook); if (net.role === 'guest') netSend({ t:'look', look: packLook(myLook) }); }
-    $('ver').textContent = 'v0.6.4 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
+    $('ver').textContent = 'v0.6.5 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
   }
   setDev(devMode);
   let verTaps = [];
