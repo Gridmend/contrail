@@ -216,6 +216,7 @@ body{
   border:1px solid var(--line); border-radius:8px; padding:12px; width:100%; box-sizing:border-box; user-select:text; -webkit-user-select:text; touch-action:manipulation}
 .card input::placeholder{color:rgba(147,164,204,.5)}
 .card input:focus-visible{outline:2px solid var(--fuel); outline-offset:1px}
+#netstat{position:fixed; top:max(12px, env(safe-area-inset-top,0px)); left:50%; transform:translateX(-50%); z-index:30; font-family:var(--display); font-weight:600; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#04121c; background:var(--drop); border-radius:999px; padding:7px 14px; box-shadow:0 4px 18px rgba(0,0,0,.4); white-space:nowrap}
 .duo{display:grid; grid-template-columns:1fr 1fr; gap:8px}
 #hangar{gap:12px}
 #hgPrev{width:100%; height:100px; border:1px solid var(--line); border-radius:8px; background:rgba(5,11,29,.55); display:block}
@@ -274,6 +275,7 @@ body{
 <button class="hud" id="pad" type="button" hidden aria-label="Boost">BOOST</button>
 <pre class="hud" id="debug" hidden></pre>
 <div class="hud" id="banner" hidden aria-live="assertive"></div>
+<div id="netstat" role="status" hidden></div>
 <div class="hud" id="rolltip" hidden aria-live="polite">
   <svg viewBox="0 0 24 40" aria-hidden="true"><path d="M12 38V6M3 15l9-10 9 10" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
   <span>SWIPE UP TO ROLL</span>
@@ -310,7 +312,7 @@ body{
     </details>
     <button class="btn-ghost" id="install" type="button" hidden>Install app</button>
     <p class="fine" id="ios-hint" hidden>On iPhone: tap Share, then Add to Home Screen.</p>
-    <p class="fine" id="ver">v0.6.5 · 12 bots, or fly with friends</p>
+    <p class="fine" id="ver">v0.6.6 · 12 bots, or fly with friends</p>
   </section>
 
   <section class="card" id="death" hidden>
@@ -363,7 +365,8 @@ body{
     <div id="lobby" hidden>
       <div class="stat-label">ROOM CODE</div>
       <div class="code" id="lcode">----</div>
-      <p class="fine">Friends open contrail-io.netlify.app, tap Play with friends, and enter this code.</p>
+      <button class="btn-ghost" id="share" type="button">Share invite</button>
+      <p class="fine" id="share-note">Send the invite link, or have friends tap Friends on the menu and enter this code. You can switch apps to send it: your seat is held for 2 minutes.</p>
       <ul class="roster" id="roster"></ul>
       <p class="fine" id="seats"></p>
       <button class="btn" id="start" type="button" hidden>Start</button>
@@ -475,7 +478,7 @@ body{
   addEventListener('hashchange', () => { DEBUG = location.hash === '#debug'; $('debug').hidden = !DEBUG; });
   let jets = [], orbs = [], parts = [];
   // multiplayer: 'solo' (just you and bots), 'host' (your phone runs the room), 'guest' (you fly in a friend's room)
-  const net = { looks:{}, role:'solo', ws:null, code:'', myId:0, roster:[], started:false, snaps:[], sendT:0, inT:0, rollSeq:0, rollDir:1, name:'' };
+  const net = { key:'', leaving:false, rc:null, looks:{}, role:'solo', ws:null, code:'', myId:0, roster:[], started:false, snaps:[], sendT:0, inT:0, rollSeq:0, rollDir:1, name:'' };
   let boostTip = false, rollTip = false, shake = 0, rings = [];
   let state = 'menu', time = 0, dropT = 12, drop = null, dropCount = 0;
   let buff = null, buffT = BUFF_FIRST;
@@ -1651,7 +1654,7 @@ body{
     if (j === revenge) drawSkull(j.x, baseY - slotH*slot++, 9/z, z);
     if (!j.isPlayer){
       ctx.font = `600 ${12/z}px "Chakra Petch", sans-serif`; ctx.textAlign = 'center';
-      ctx.fillStyle = 'rgba(233,240,255,.72)'; ctx.fillText(devMode && j.tier ? `${j.name} · ${j.tier.toUpperCase()}` : j.name, j.x, j.y - 15 - 6/z);
+      ctx.fillStyle = 'rgba(233,240,255,.72)'; ctx.fillText(j.name, j.x, j.y - 15 - 6/z);
     }
   }
 
@@ -1958,7 +1961,7 @@ body{
 
   function netSend(m){ if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(m)); }
   function tell(j, ev){ if (net.role === 'host' && j.remote) netSend(Object.assign({ t:'ev', to: j.netId }, ev)); }
-  function roomError(msg){ $('room-err').textContent = msg || ''; $('room-err').hidden = !msg; }
+  function roomError(msg){ $('room-err').style.color = ''; $('room-err').textContent = msg || ''; $('room-err').hidden = !msg; }
   function setRoomBusy(b){ $('create').disabled = b; $('join').disabled = b; }
 
   function connect(onOpen){
@@ -1970,34 +1973,91 @@ body{
     catch(e){ setRoomBusy(false); roomError("Can't reach the room server from here. Rooms work at contrail-io.netlify.app."); return; }
     net.ws = ws;
     const giveUp = setTimeout(() => {
-      if (ws.readyState !== 1){ try { ws.close(); } catch(e) {} setRoomBusy(false); roomError("The room server didn't answer. Check your connection and try again."); }
+      if (ws.readyState !== 1){ try { ws.close(); } catch(e) {} setRoomBusy(false); if (!net.rc) roomError("The room server didn't answer. Check your connection and try again."); }
     }, 8000);
     ws.onopen = () => { clearTimeout(giveUp); onOpen(); };
     ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch(_) { return; } onNet(m); };
-    ws.onclose = () => { clearTimeout(giveUp); setRoomBusy(false); if (net.role !== 'solo') roomClosed('Lost the connection to the room.'); };
+    ws.onclose = () => {
+      clearTimeout(giveUp); setRoomBusy(false);
+      if (ws !== net.ws) return;                               // an old socket we already replaced
+      if (net.role !== 'solo' && !net.leaving) startReconnect();
+    };
     ws.onerror = () => {};
+  }
+
+  // ---------- staying in the room when the connection drops (switching apps, locking the phone) ----------
+  const SEAT_HOLD_MS = 120000;
+  const saveSession = () => ls.set('contrail-room', JSON.stringify({ code:net.code, id:net.myId, key:net.key, role:net.role, at:Date.now() }));
+  const clearSession = () => ls.set('contrail-room', '');
+  function netStatus(text){ $('netstat').textContent = text || ''; $('netstat').hidden = !text; }
+  function startReconnect(){
+    if (!net.rc) net.rc = { since: Date.now(), tries: 0, timer: 0 };
+    netStatus('Reconnecting...');
+    tryReconnect();
+  }
+  function tryReconnect(){
+    const rc = net.rc; if (!rc) return;
+    clearTimeout(rc.timer);
+    if (Date.now() - rc.since > SEAT_HOLD_MS + 5000){ net.rc = null; netStatus(''); clearSession(); roomClosed('Lost the connection to the room.'); return; }
+    if (net.ws && (net.ws.readyState === 0 || net.ws.readyState === 1)) return;   // already trying
+    rc.tries++;
+    connect(() => netSend({ t:'resume', code:net.code, id:net.myId, key:net.key }));
+    rc.timer = setTimeout(() => { if (net.rc && !(net.ws && net.ws.readyState === 1)) tryReconnect(); }, Math.min(5000, 1000*rc.tries));
+  }
+  // come straight back the moment the phone wakes up or the app is reopened
+  const netWake = () => { if (net.rc && document.visibilityState === 'visible'){ net.rc.tries = 0; if (net.ws && net.ws.readyState === 0){ try { net.ws.close(); } catch(e) {} } tryReconnect(); } };
+  document.addEventListener('visibilitychange', netWake); addEventListener('online', netWake); addEventListener('pageshow', netWake);
+  function leaveRoom(){
+    net.leaving = true; netSend({ t:'leave' }); clearSession();
+    setTimeout(() => location.reload(), 120);
   }
 
   function onNet(m){
     switch (m.t){
       case 'created':
-        net.role = 'host'; net.code = m.code; net.myId = m.id; net.started = false;
+        net.role = 'host'; net.code = m.code; net.myId = m.id; net.key = m.key; net.started = false; saveSession();
         dlog('ROOM created', { code:m.code }); showLobby(); break;
+      case 'resumed': {
+        const fromReload = !!net.reload; net.reload = false;
+        net.rc && clearTimeout(net.rc.timer); net.rc = null; netStatus(''); setRoomBusy(false); roomError('');
+        net.code = m.code; net.myId = m.id; saveSession();
+        dlog('ROOM resumed', { code:m.code, host:m.host, reload:fromReload });
+        if (m.host){
+          net.role = 'host';
+          if (fromReload){
+            // our page restarted: put the friends who are still here back in the sky
+            net.started = m.started;
+            for (const pl of m.players) if (!pl.host) addRemote(pl.id, pl.name);
+            if (m.started){ for (const j of jets) if (j.remote && !j.alive) spawn(j); fly(); } else showLobby();
+          }
+          netSend({ t:'orbs', o: orbs.map(packOrb) });                  // anything they missed
+        } else {
+          net.role = 'guest';
+          netSend({ t:'look', look: packLook(myLook) });
+          if (fromReload){ resetGuestWorld(); if (m.started) guestBegin(); else showLobby(); }
+        }
+        if (m.players){ net.roster = m.players; renderRoster(); }
+        break;
+      }
       case 'joined':
-        net.role = 'guest'; net.code = m.code; net.myId = m.id; net.started = false;
+        net.role = 'guest'; net.code = m.code; net.myId = m.id; net.key = m.key; net.started = false; saveSession();
         dlog('ROOM joined', { code:m.code });
-        // the host's phone runs the world now; clear ours
-        jets.length = 0; orbs.length = 0; parts.length = 0; mirrors.clear(); net.snaps.length = 0;
-        buff = null; drop = null; bounty = null; revenge = null; player.alive = false; player.pts = [];
+        resetGuestWorld();
         netSend({ t:'look', look: packLook(myLook) });       // so the host draws us the way we picked
         if (m.started) guestBegin(); else showLobby();
         break;
       case 'look': if (net.role === 'host'){ net.looks[m.from] = unpackLook(m.look); const r = remoteByNet(m.from); if (r && net.looks[m.from]){ r.look = net.looks[m.from]; r.color = lookHex(r.look); } } break;
       case 'roster': net.roster = m.players; renderRoster(); break;
       case 'error':
-        setRoomBusy(false); roomError(m.message);
+        setRoomBusy(false);
+        if (m.code === 'gone'){ net.rc && clearTimeout(net.rc.timer); net.rc = null; netStatus(''); clearSession(); try { net.ws.onclose = null; net.ws.close(); } catch(e) {} net.ws = null; roomClosed(m.message); break; }
+        roomError(m.message);
         net.role = 'solo'; try { net.ws.onclose = null; net.ws.close(); } catch(e) {} net.ws = null;
         break;
+      case 'guest-away': if (net.role === 'host'){ const r = remoteByNet(m.id); if (r){ r.input = NO_INTENT; if (state === 'play') toast(`${r.name} lost connection`, ''); } } break;
+      case 'guest-back': if (net.role === 'host'){ const r = remoteByNet(m.id); netSend({ t:'orbs', to:m.id, o: orbs.map(packOrb) }); if (r && state === 'play') toast(`${r.name} is back`, ''); } break;
+      case 'host-away': if (net.role === 'guest') netStatus('Host stepped away. Holding the room...'); break;
+      case 'host-back': if (net.role === 'guest' && !net.rc) netStatus(''); break;
       // ---- host receives ----
       case 'guest-join': if (net.role === 'host') addRemote(m.id, m.name); break;
       case 'guest-leave': if (net.role === 'host') removeRemote(m.id); break;
@@ -2012,8 +2072,14 @@ body{
       case 'snap': if (net.role === 'guest') onSnap(m); break;
       case 'orbs': if (net.role === 'guest'){ orbs.length = 0; for (const o of m.o) mirrorOrb(o); } break;
       case 'ev': if (net.role === 'guest') onEvent(m); break;
-      case 'host-left': roomClosed('The host left, so the room closed.'); break;
+      case 'host-left': clearSession(); netStatus(''); roomClosed('The host left, so the room closed.'); break;
     }
+  }
+
+  function resetGuestWorld(){
+    // the host's phone runs the world now; clear ours
+    jets.length = 0; orbs.length = 0; parts.length = 0; mirrors.clear(); net.snaps.length = 0;
+    buff = null; drop = null; bounty = null; revenge = null; player.alive = false; player.pts = [];
   }
 
   // ---------- host ----------
@@ -2207,7 +2273,7 @@ body{
     const ul = $('roster'); ul.replaceChildren();
     for (const p of net.roster){
       const li = document.createElement('li');
-      const n = document.createElement('span'); n.textContent = p.name + (p.id === net.myId ? ' (you)' : '');
+      const n = document.createElement('span'); n.textContent = p.name + (p.id === net.myId ? ' (you)' : '') + (p.away ? ' · away' : '');
       const t = document.createElement('span'); t.className = 'tag'; t.textContent = p.host ? 'HOST' : 'PILOT';
       li.append(n, t); ul.append(li);
     }
@@ -2310,7 +2376,7 @@ body{
     if (!on){ hgKing = false; $('hg-king').setAttribute('aria-pressed', 'false');
       Object.assign(myLook, sanitizeLook(myLook, true)); ls.set('contrail-look', JSON.stringify(myLook));   // back to looks you've earned
       player.look = myLook; player.color = lookHex(myLook); if (net.role === 'guest') netSend({ t:'look', look: packLook(myLook) }); }
-    $('ver').textContent = 'v0.6.5 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
+    $('ver').textContent = 'v0.6.6 · 12 bots, or fly with friends' + (on ? ' · DEV' : '');
   }
   setDev(devMode);
   let verTaps = [];
@@ -2335,10 +2401,38 @@ body{
   $('jcode').addEventListener('keydown', e => { if (e.key === 'Enter') $('join').click(); });
   $('start').addEventListener('click', () => { ensureAudio(); hostStart(); });
   $('room-back').addEventListener('click', () => {
-    if (net.role !== 'solo') { location.reload(); return; }      // leaving a room: start clean
+    if (net.role !== 'solo') { leaveRoom(); return; }      // leaving a room: start clean
     $('rooms').hidden = true; $('menu').hidden = false; roomError('');
   });
-  $('d-room').addEventListener('click', () => location.reload());
+  $('d-room').addEventListener('click', leaveRoom);
+
+  // ---------- invites ----------
+  const inviteUrl = () => `${location.origin}${location.pathname}?room=${net.code}`;
+  $('share').addEventListener('click', async () => {
+    const text = `Fly with me in Contrail.io. Room code ${net.code}`, url = inviteUrl();
+    try { if (navigator.share){ await navigator.share({ title:'Contrail.io', text, url }); return; } } catch(e){ if (e && e.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(`${text}: ${url}`); $('share').textContent = 'Invite copied'; }
+    catch(e){ $('share').textContent = url; }
+    setTimeout(() => { $('share').textContent = 'Share invite'; }, 2500);
+  });
+  // opened from an invite link, or the page restarted while we were in a room
+  (() => {
+    let saved = null; try { saved = JSON.parse(ls.get('contrail-room') || 'null'); } catch(e) {}
+    const invite = (qs.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
+    if (qs.has('room')){ try { history.replaceState(null, '', location.pathname + location.hash); } catch(e) {} }
+    if (saved && saved.code && Date.now() - saved.at < SEAT_HOLD_MS && (!invite || invite === saved.code)){
+      net.code = saved.code; net.myId = saved.id; net.key = saved.key; net.role = saved.role; net.reload = true;
+      showRooms(); $('room-pick').hidden = true; $('lobby').hidden = true; roomError('');
+      startReconnect(); netStatus(`Rejoining room ${saved.code}...`);
+      return;
+    }
+    if (saved) clearSession();
+    if (invite.length === 4){
+      showRooms(); $('jcode').value = invite;
+      roomError(''); $('pname').focus({ preventScroll:true });
+      $('room-err').hidden = false; $('room-err').style.color = 'var(--fuel)'; $('room-err').textContent = `Invited to room ${invite}. Enter your callsign and tap Join.`;
+    }
+  })();
   $('d-menu').addEventListener('click', () => { $('death').hidden = true; $('menu').hidden = false; $('overlay').scrollTop = 0; });
 
   // ================= LOOP =================
